@@ -45,7 +45,7 @@ fn extract_lifetime(text: &str) -> (&str, i64, i64) {
 pub mod model {
     use anyhow::anyhow;
     use bigdecimal::{BigDecimal, FromPrimitive, ParseBigDecimalError};
-    use chrono::{Date, DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Utc};
+    use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Utc};
     use slug::slugify;
     use std::collections::HashMap;
     use std::convert::TryFrom;
@@ -163,8 +163,8 @@ pub mod model {
         pub fn get_name(&self) -> &str {
             &self.name[..]
         }
-        pub fn get_tags(&self) -> Vec<&String> {
-            Vec::from_iter(self.tags.values())
+        pub fn get_tags(&self) -> Vec<String> {
+            Vec::from_iter(self.tags.values().map(|v| String::from(v)))
         }
         pub fn get_amount(&self) -> &BigDecimal {
             &self.amount
@@ -180,6 +180,12 @@ pub mod model {
         }
         pub fn get_recorded_at_rfc3339(&self) -> String {
             self.recorded_at.to_rfc3339()
+        }
+        /// Returns true if the base amount is the same as the total
+        ///
+        /// That is, when there is no repetition on the lifetime
+        pub fn amount_is_total(&self) -> bool {
+            self.get_amount_total() == self.amount
         }
         /// Tells if the TxRecord as a tag
         pub fn has_tag(&self, tag: &str) -> bool {
@@ -206,9 +212,8 @@ pub mod model {
                 .with_prec(2)
         }
         /// Returns the end date (always computed)
-        pub fn get_end_date(&self) -> Date<Local> {
-            let x = self.starts_on + Duration::days(self.lifetime.get_days_from(&self.starts_on));
-            Local.from_local_date(&x).unwrap()
+        pub fn get_ends_on(&self) -> NaiveDate {
+            self.starts_on + Duration::days(self.lifetime.get_days_from(&self.starts_on))
         }
 
         pub fn new(name: &str, amount: &str) -> Result<TxRecord, anyhow::Error> {
