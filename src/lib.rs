@@ -7,31 +7,28 @@ lazy_static! {
         Regex::new(r"(([1-9]{1}[0-9]{0,2}(,[0-9]{3})*(\.[0-9]{0,2})?|[1-9]{1}[0-9]{0,}(\.[0-9]{0,2})?|0(\.[0-9]{0,2})?|(\.[0-9]{1,2})?))\p{Currency_Symbol}")
             .unwrap();
     static ref RE_HASHTAG: Regex = Regex::new(r"\#([a-zA-Z][0-9a-zA-Z_]*)").unwrap();
-    static ref RE_LIFETIME: Regex = Regex::new(r"(([1-9]{1}[0-9]*)([dwy]))(([1-9]{1}[0-9]*)x)?").unwrap();
+    static ref RE_LIFETIME: Regex = Regex::new(r"(([1-9]{1}[0-9]*)([dwmy]))(([1-9]{1}[0-9]*)x)?").unwrap();
     static ref RE_DATE: Regex = Regex::new(r"([0-3][0-9][0-1][0-9][1-9][0-9])").unwrap();
 }
 
 // ex "AKU Bellamont 3 Suede Low GTX 2020 #vestiti 129.95€ 3y"
 
-fn extract_amount(input: &str) -> &str {
+fn extract_amount(input: &str) -> Option<&str> {
     RE_CURRENCY
         .captures(input)
         .and_then(|c| c.get(1).map(|m| m.as_str()))
-        .unwrap()
 }
 
-fn extract_hashtag(text: &str) -> &str {
+fn extract_hashtag(text: &str) -> Option<&str> {
     RE_HASHTAG
         .captures(text)
         .and_then(|c| c.get(1).map(|m| m.as_str()))
-        .unwrap()
 }
 
-fn extract_date(text: &str) -> &str {
+fn extract_date(text: &str) -> Option<&str> {
     RE_DATE
         .captures(text)
         .and_then(|c| c.get(1).map(|m| m.as_str()))
-        .unwrap()
 }
 
 fn extract_lifetime(text: &str) -> (&str, i64, i64) {
@@ -47,10 +44,11 @@ fn extract_lifetime(text: &str) -> (&str, i64, i64) {
 
 pub mod model {
     use anyhow::anyhow;
-    pub use bigdecimal::{BigDecimal, FromPrimitive, ParseBigDecimalError};
-    pub use chrono::{Date, DateTime, Duration, Local, NaiveDate, TimeZone, Utc};
+    use bigdecimal::{BigDecimal, FromPrimitive, ParseBigDecimalError};
+    use chrono::{Date, DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Utc};
     use slug::slugify;
     use std::collections::HashMap;
+    use std::convert::TryFrom;
     use std::fmt;
     use std::iter::FromIterator;
     use std::str::FromStr;
@@ -60,6 +58,7 @@ pub mod model {
         // amount, times
         SingleDay,
         Year { amount: i64, times: i64 },
+        Month { amount: i64, times: i64 },
         Week { amount: i64, times: i64 },
         Day { amount: i64, times: i64 },
     }
@@ -68,9 +67,36 @@ pub mod model {
         pub fn get_days(&self) -> i64 {
             match self {
                 Self::Year { amount, times } => amount * 365 * times,
+                Self::Month { amount, times } => amount * 30 * times, //approx
                 Self::Week { amount, times } => amount * 7 * times,
                 Self::Day { amount, times } => amount * times,
                 Self::SingleDay => 1,
+            }
+        }
+
+        /// Returns the number of days from a given date.
+        ///
+        /// This is only significant for months, that have a variable
+        /// size and therefore is necessary to know the start date
+        /// to calculate the number of days
+        pub fn get_days_from(&self, begin: &NaiveDate) -> i64 {
+            match self {
+                Self::Month { amount, times } => {
+                    // compute the total number of months (nm)
+                    let nm = begin.month() + u32::try_from(times * amount).unwrap();
+                    // match nm (number of months) and calculate the end year / month
+                    let ym = match nm {
+                        12 => (begin.year_ce().1, 12),
+                        nm => (begin.year_ce().1 + nm / 12, nm % 12),
+                    };
+                    // wrap the result with the correct type
+                    let eymd = (i32::try_from(ym.0).unwrap(), ym.1, begin.day());
+                    // calculate the end date
+                    let end = NaiveDate::from_ymd(eymd.0, eymd.1, eymd.2) - Duration::days(1);
+                    // count the days
+                    end.signed_duration_since(*begin).num_days()
+                }
+                _ => self.get_days(),
             }
         }
 
@@ -78,13 +104,13 @@ pub mod model {
             self.get_days() * 86400
         }
 
-        // calculate the amount
-        pub fn get_amount(&self, base: &BigDecimal) -> BigDecimal {
+        pub fn get_repeats(&self) -> i64 {
             match self {
-                Self::Year { times, .. } => BigDecimal::from_i64(*times).unwrap() * base,
-                Self::Week { times, .. } => BigDecimal::from_i64(*times).unwrap() * base,
-                Self::Day { times, .. } => BigDecimal::from_i64(*times).unwrap() * base,
-                Self::SingleDay => BigDecimal::from(1) * base,
+                Self::Year { times, .. } => *times,
+                Self::Week { times, .. } => *times,
+                Self::Day { times, .. } => *times,
+                Self::Month { times, .. } => *times,
+                Self::SingleDay => 1,
             }
         }
     }
@@ -92,19 +118,23 @@ pub mod model {
     impl FromStr for Lifetime {
         type Err = anyhow::Error;
         fn from_str(s: &str) -> Result<Lifetime, anyhow::Error> {
-            let l = super::extract_lifetime(s);
-            match l.0 {
+            let lifetime = super::extract_lifetime(s);
+            match lifetime.0 {
                 "d" => Ok(Lifetime::Day {
-                    amount: l.1,
-                    times: l.2,
+                    amount: lifetime.1,
+                    times: lifetime.2,
                 }),
                 "w" => Ok(Lifetime::Week {
-                    amount: l.1,
-                    times: l.2,
+                    amount: lifetime.1,
+                    times: lifetime.2,
                 }),
                 "y" => Ok(Lifetime::Year {
-                    amount: l.1,
-                    times: l.2,
+                    amount: lifetime.1,
+                    times: lifetime.2,
+                }),
+                "m" => Ok(Lifetime::Month {
+                    amount: lifetime.1,
+                    times: lifetime.2,
                 }),
                 _ => Err(anyhow!("invalid value {}", s)),
             }
@@ -122,7 +152,7 @@ pub mod model {
         name: String,
         tags: HashMap<String, String>,
         amount: BigDecimal,
-        starts_on: i64,
+        starts_on: NaiveDate,
         lifetime: Lifetime, // in days
         recorded_at: DateTime<Local>,
         src: String,
@@ -142,7 +172,7 @@ pub mod model {
         pub fn get_duration(&self) -> &Lifetime {
             &self.lifetime
         }
-        pub fn get_starts_on(&self) -> i64 {
+        pub fn get_starts_on(&self) -> NaiveDate {
             self.starts_on
         }
         pub fn get_recorded_at(&self) -> &DateTime<Local> {
@@ -151,32 +181,34 @@ pub mod model {
         pub fn get_recorded_at_rfc3339(&self) -> String {
             self.recorded_at.to_rfc3339()
         }
-        // tells if the TxRecord as a tag
+        /// Tells if the TxRecord as a tag
         pub fn has_tag(&self, tag: &str) -> bool {
             self.tags.contains_key(&slugify(&tag))
         }
-        // get total amount for the transaction records
+        /// Returns total amount for the transaction record
         pub fn get_amount_total(&self) -> BigDecimal {
-            self.lifetime.get_amount(&self.amount)
+            BigDecimal::from_i64(self.lifetime.get_repeats()).unwrap() * &self.amount
         }
-        // return the duration in days for this transaction
+        /// Returns the duration in days for this transaction
         pub fn get_duration_days(&self) -> BigDecimal {
-            BigDecimal::from_i64(self.lifetime.get_days()).unwrap()
+            BigDecimal::from_i64(self.lifetime.get_days_from(&self.starts_on)).unwrap()
         }
-        // calculate the per_diem
+        /// Calculates and returns the per diem for the record
+        ///
+        /// The per diem is calculated as follow:
+        /// END_DAY = START_DAY + (RECURRENCE_SIZE_DAYS * SEC_IN_DAYS  * RECURRENCE_TIMES)
+        /// PER_DIEM = AMOUNT * RECURRENCE_TIMES) / (END_DAY - START_DAY )
+        ///
         pub fn per_diem(&self) -> BigDecimal {
             // TODO add inflation?
-            // now calculate the per diem amount with the following:
-            // END_DAY = START_DAY + (RECURRENCE_SIZE_DAYS * SEC_IN_DAYS  * RECURRENCE_TIMES)
-            // formula is (AMOUNT * RECURRENCE_TIMES) / (END_DAY - START_DAY )
             (self.get_amount_total() / self.get_duration_days())
                 .with_scale(100)
                 .with_prec(2)
         }
-        // end date is always computed
+        /// Returns the end date (always computed)
         pub fn get_end_date(&self) -> Date<Local> {
-            let x = Utc.timestamp(self.starts_on, 0) + Duration::days(self.lifetime.get_days());
-            Local.from_local_datetime(&x.naive_local()).unwrap().date()
+            let x = self.starts_on + Duration::days(self.lifetime.get_days_from(&self.starts_on));
+            Local.from_local_date(&x).unwrap()
         }
 
         pub fn new(name: &str, amount: &str) -> Result<TxRecord, anyhow::Error> {
@@ -209,7 +241,7 @@ pub mod model {
                 amount: BigDecimal::from_str(amount)?,
                 lifetime: lifetime,
                 recorded_at: recorded_at,
-                starts_on: starts_on.and_hms(0, 0, 0).timestamp(),
+                starts_on: starts_on,
                 src: String::from(src),
             })
         }
@@ -223,20 +255,27 @@ pub mod model {
             let mut amount = "0";
             let mut lifetime = Lifetime::SingleDay;
             let mut tags: Vec<&str> = Vec::new();
-            let mut starts_on = Utc::today().naive_utc();
+            let mut starts_on = today();
             // search for the stuff we need
             for t in s.split_whitespace() {
                 if super::RE_CURRENCY.is_match(&t) {
                     // read the currency
-                    amount = super::extract_amount(t);
+                    if let Some(a) = super::extract_amount(t) {
+                        amount = a
+                    }
                 } else if super::RE_HASHTAG.is_match(&t) {
                     // add tags
-                    tags.push(super::extract_hashtag(&t));
+                    if let Some(x) = super::extract_hashtag(&t) {
+                        tags.push(x);
+                    }
                 } else if super::RE_LIFETIME.is_match(t) {
                     // add duration
                     lifetime = t.parse::<Lifetime>()?;
                 } else if super::RE_DATE.is_match(t) {
-                    starts_on = NaiveDate::parse_from_str(super::extract_date(t), "%d%m%y")?;
+                    starts_on = match super::extract_date(t) {
+                        Some(d) => NaiveDate::parse_from_str(d, "%d%m%y")?,
+                        None => today(),
+                    }
                 } else {
                     // catch all for the name
                     name.push(&t)
@@ -289,6 +328,10 @@ pub mod model {
     pub fn now_local() -> DateTime<Local> {
         Local::now()
     }
+
+    pub fn date(d: u32, m: u32, y: i32) -> NaiveDate {
+        NaiveDate::from_ymd(y, m, d)
+    }
 }
 
 #[cfg(test)]
@@ -318,21 +361,55 @@ mod tests {
                 model::parse_amount("0.12").unwrap(),
             ),
             (
-                "Rent 729€ 1y #rent",
+                "Rent 729€ 1m12x 010120 #rent",
                 TxRecord::from(
                     "Rent",
                     vec!["rent"],
                     "729",
-                    model::today(),
-                    Lifetime::Year {
+                    model::date(1, 1, 2020),
+                    Lifetime::Month {
                         amount: 1,
+                        times: 12,
+                    },
+                    model::now_local(),
+                    "-- not checked --",
+                )
+                .unwrap(),
+                model::parse_amount("24").unwrap(),
+            ),
+            (
+                "Tea 20€ 2m1x 010120 #food",
+                TxRecord::from(
+                    "Tea",
+                    vec!["food"],
+                    "20",
+                    model::date(1, 1, 2020),
+                    Lifetime::Month {
+                        amount: 2,
                         times: 1,
                     },
                     model::now_local(),
-                    "Rent 729€ 1y #rent",
+                    "-- not checked --",
                 )
                 .unwrap(),
-                model::parse_amount("23.97").unwrap(),
+                model::parse_amount("0.34").unwrap(),
+            ),
+            (
+                "Tea 20€ 1m2x 010120 #food",
+                TxRecord::from(
+                    "Tea",
+                    vec!["food"],
+                    "20",
+                    model::date(1, 1, 2020),
+                    Lifetime::Month {
+                        amount: 1,
+                        times: 2,
+                    },
+                    model::now_local(),
+                    "-- not checked --",
+                )
+                .unwrap(),
+                model::parse_amount("0.68").unwrap(),
             ),
         ];
 
@@ -371,7 +448,7 @@ mod tests {
                     amount: 10,
                     times: 10,
                 },
-                70,
+                700,
             ),
             (
                 "1y20x",
