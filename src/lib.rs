@@ -3,11 +3,10 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 lazy_static! {
-    static ref RE_CURRENCY: Regex =
-        Regex::new(r"(([1-9]{1}[0-9]{0,2}(,[0-9]{3})*(\.[0-9]{0,2})?|[1-9]{1}[0-9]{0,}(\.[0-9]{0,2})?|0(\.[0-9]{0,2})?|(\.[0-9]{1,2})?))\p{Currency_Symbol}")
-            .unwrap();
+    static ref RE_CURRENCY: Regex = Regex::new(r"(\d+(\.\d{2})?)\p{Currency_Symbol}").unwrap();
     static ref RE_HASHTAG: Regex = Regex::new(r"\#([a-zA-Z][0-9a-zA-Z_]*)").unwrap();
-    static ref RE_LIFETIME: Regex = Regex::new(r"(([1-9]{1}[0-9]*)([dwmy]))(([1-9]{1}[0-9]*)x)?").unwrap();
+    static ref RE_LIFETIME: Regex =
+        Regex::new(r"(([1-9]{1}[0-9]*)([dwmy]))(([1-9]{1}[0-9]*)x)?").unwrap();
     static ref RE_DATE: Regex = Regex::new(r"([0-3][0-9][0-1][0-9][1-9][0-9])").unwrap();
 }
 
@@ -45,7 +44,7 @@ fn extract_lifetime(text: &str) -> (&str, i64, i64) {
 pub mod model {
     use anyhow::anyhow;
     use bigdecimal::{BigDecimal, FromPrimitive, ParseBigDecimalError};
-    use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Utc};
+    use chrono::{DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, Utc};
     use slug::slugify;
     use std::collections::HashMap;
     use std::convert::TryFrom;
@@ -53,7 +52,7 @@ pub mod model {
     use std::iter::FromIterator;
     use std::str::FromStr;
 
-    #[derive(Debug)]
+    #[derive(Debug, Copy, Clone)]
     pub enum Lifetime {
         // amount, times
         SingleDay,
@@ -64,16 +63,6 @@ pub mod model {
     }
 
     impl Lifetime {
-        pub fn get_days(&self) -> i64 {
-            match self {
-                Self::Year { amount, times } => amount * 365 * times,
-                Self::Month { amount, times } => amount * 30 * times, //approx
-                Self::Week { amount, times } => amount * 7 * times,
-                Self::Day { amount, times } => amount * times,
-                Self::SingleDay => 1,
-            }
-        }
-
         /// Returns the number of days from a given date.
         ///
         /// This is only significant for months, that have a variable
@@ -96,12 +85,27 @@ pub mod model {
                     // count the days
                     end.signed_duration_since(*begin).num_days()
                 }
-                _ => self.get_days(),
+                Self::Year { amount, times } => {
+                    let ny = begin.year() + i32::try_from(times * amount).unwrap();
+                    let end =
+                        NaiveDate::from_ymd(ny, begin.month(), begin.day()) - Duration::days(1);
+                    // count the days
+                    end.signed_duration_since(*begin).num_days()
+                }
+                Self::Week { amount, times } => amount * 7 * times,
+                Self::Day { amount, times } => amount * times,
+                Self::SingleDay => 1,
             }
         }
 
-        pub fn get_seconds(&self) -> i64 {
-            self.get_days() * 86400
+        fn get_days_approx(&self) -> f64 {
+            match self {
+                Self::Year { amount, times } => 365.25 * f64::from_i64(amount * times).unwrap(),
+                Self::Month { amount, times } => 30.44 * f64::from_i64(amount * times).unwrap(),
+                Self::Week { amount, times } => 7.0 * f64::from_i64(amount * times).unwrap(),
+                Self::Day { amount, times } => f64::from_i64(amount * times).unwrap(),
+                Self::SingleDay => 1.0,
+            }
         }
 
         pub fn get_repeats(&self) -> i64 {
@@ -143,19 +147,31 @@ pub mod model {
 
     impl PartialEq for Lifetime {
         fn eq(&self, other: &Self) -> bool {
-            self.get_seconds() == other.get_seconds()
+            self.get_days_approx() == other.get_days_approx()
         }
     }
 
-    #[derive(Debug)]
+    impl fmt::Display for Lifetime {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::Year { amount, times } => write!(f, "{}y{}x", amount, times),
+                Self::Month { amount, times } => write!(f, "{}m{}x", amount, times),
+                Self::Week { amount, times } => write!(f, "{}w{}x", amount, times),
+                Self::Day { amount, times } => write!(f, "{}d{}x", amount, times),
+                Self::SingleDay => write!(f, "1d1x"),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
     pub struct TxRecord {
         name: String,
         tags: HashMap<String, String>,
         amount: BigDecimal,
         starts_on: NaiveDate,
         lifetime: Lifetime, // in days
-        recorded_at: DateTime<Local>,
-        src: String,
+        recorded_at: DateTime<FixedOffset>,
+        src: Option<String>,
     }
 
     impl TxRecord {
@@ -166,16 +182,16 @@ pub mod model {
         pub fn get_tags(&self) -> Vec<String> {
             Vec::from_iter(self.tags.values().map(|v| String::from(v)))
         }
-        pub fn get_amount(&self) -> &BigDecimal {
-            &self.amount
+        pub fn get_amount(&self) -> BigDecimal {
+            self.amount.with_prec(2)
         }
-        pub fn get_duration(&self) -> &Lifetime {
+        pub fn get_lifetime(&self) -> &Lifetime {
             &self.lifetime
         }
         pub fn get_starts_on(&self) -> NaiveDate {
             self.starts_on
         }
-        pub fn get_recorded_at(&self) -> &DateTime<Local> {
+        pub fn get_recorded_at(&self) -> &DateTime<FixedOffset> {
             &self.recorded_at
         }
         pub fn get_recorded_at_rfc3339(&self) -> String {
@@ -215,16 +231,76 @@ pub mod model {
         pub fn get_ends_on(&self) -> NaiveDate {
             self.starts_on + Duration::days(self.lifetime.get_days_from(&self.starts_on))
         }
+        /// Serialize the record to its string format
+        pub fn to_string_record(&self) -> String {
+            match &self.src {
+                Some(s) => {
+                    format!(
+                        "{}::{}::{}\n",
+                        self.get_recorded_at_rfc3339(),
+                        self.get_starts_on(),
+                        s
+                    )
+                }
+                None => format!(
+                    "{}::{}::{} {}€ {} {}\n",
+                    self.get_recorded_at_rfc3339(),
+                    self.get_starts_on(),
+                    self.name,
+                    self.get_amount(),
+                    self.lifetime,
+                    self.get_tags()
+                        .into_iter()
+                        .map(|t| format!("#{}", t))
+                        .collect::<Vec<String>>()
+                        .join(" ")
+                ),
+            }
+        }
+        // Deserialize the record from
+        pub fn from_string_record(s: &str) -> Result<TxRecord, Box<dyn std::error::Error>> {
+            let abc = s.trim().splitn(3, "::").collect::<Vec<&str>>();
+            let mut tx = Self::from_str(abc[2])?;
+            tx.starts_on = NaiveDate::from_str(abc[1])?;
+            tx.recorded_at = DateTime::parse_from_rfc3339(abc[0])?;
+            Ok(tx)
+        }
+
+        /// Pretty print to stdout
+        ///
+        pub fn pretty_print(&self) {
+            println!(
+                "Name     : {} #[{}]",
+                self.get_name(),
+                self.get_tags().join(",")
+            );
+            match self.amount_is_total() {
+                true => println!("Amount   : {}", self.get_amount()),
+                _ => {
+                    println!(
+                        "Amount   : {} (Total: {})",
+                        self.get_amount(),
+                        self.get_amount_total()
+                    )
+                }
+            }
+            println!(
+                "From / To: {} / {}",
+                self.get_starts_on(),
+                self.get_ends_on()
+            );
+            println!("Per Diem : {}", self.per_diem());
+        }
 
         pub fn new(name: &str, amount: &str) -> Result<TxRecord, anyhow::Error> {
             TxRecord::from(
                 name,
                 Vec::new(),
                 amount,
-                Utc::today().naive_utc(),
+                today(),
                 Lifetime::SingleDay,
-                Local::now(),
-                &format!("{} {}", name, amount),
+                now_local(),
+                None,
             )
         }
 
@@ -234,8 +310,8 @@ pub mod model {
             amount: &str,
             starts_on: NaiveDate,
             lifetime: Lifetime,
-            recorded_at: DateTime<Local>,
-            src: &str,
+            recorded_at: DateTime<FixedOffset>,
+            src: Option<&str>,
         ) -> Result<TxRecord, anyhow::Error> {
             Ok(TxRecord {
                 name: String::from(name.trim()),
@@ -247,14 +323,14 @@ pub mod model {
                 lifetime: lifetime,
                 recorded_at: recorded_at,
                 starts_on: starts_on,
-                src: String::from(src),
+                src: match src {
+                    Some(s) => Some(String::from(s)),
+                    _ => None,
+                },
             })
         }
 
         pub fn from_str(s: &str) -> Result<TxRecord, anyhow::Error> {
-            if s.len() == 0 {
-                return Err(anyhow!("string is too short!"));
-            }
             // make an empty record
             let mut name: Vec<&str> = Vec::new();
             let mut amount = "0";
@@ -286,15 +362,15 @@ pub mod model {
                     name.push(&t)
                 }
             }
-
+            // build the tx record
             TxRecord::from(
                 &name.join(" "),
                 tags,
                 amount,
                 starts_on,
                 lifetime,
-                Local::now(),
-                s,
+                now_local(),
+                Some(s),
             )
         }
     }
@@ -330,8 +406,8 @@ pub mod model {
         Utc::today().naive_utc()
     }
 
-    pub fn now_local() -> DateTime<Local> {
-        Local::now()
+    pub fn now_local() -> DateTime<FixedOffset> {
+        DateTime::from(Local::now())
     }
 
     pub fn date(d: u32, m: u32, y: i32) -> NaiveDate {
@@ -360,7 +436,7 @@ mod tests {
                         times: 1,
                     },
                     model::now_local(),
-                    "AKU Bellamont 3 Suede Low GTX 2020 #vestiti 129.95€ 3y",
+                    Some("AKU Bellamont 3 Suede Low GTX 2020 #vestiti 129.95€ 3y"),
                 )
                 .unwrap(),
                 model::parse_amount("0.12").unwrap(),
@@ -377,7 +453,7 @@ mod tests {
                         times: 12,
                     },
                     model::now_local(),
-                    "-- not checked --",
+                    None,
                 )
                 .unwrap(),
                 model::parse_amount("24").unwrap(),
@@ -394,7 +470,7 @@ mod tests {
                         times: 1,
                     },
                     model::now_local(),
-                    "-- not checked --",
+                    None,
                 )
                 .unwrap(),
                 model::parse_amount("0.34").unwrap(),
@@ -411,7 +487,7 @@ mod tests {
                         times: 2,
                     },
                     model::now_local(),
-                    "-- not checked --",
+                    None,
                 )
                 .unwrap(),
                 model::parse_amount("0.68").unwrap(),
@@ -461,7 +537,7 @@ mod tests {
                     amount: 1,
                     times: 20,
                 },
-                7300,
+                7304,
             ),
             (
                 "1y",
@@ -479,7 +555,7 @@ mod tests {
                 t.0.parse::<Lifetime>().expect("test_parse_lifetime error"),
                 t.1
             );
-            assert_eq!(t.1.get_days(), t.2)
+            assert_eq!(t.1.get_days_from(&model::date(1, 1, 2020)), t.2)
         }
     }
 }
