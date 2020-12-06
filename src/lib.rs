@@ -183,7 +183,7 @@ pub mod model {
             Vec::from_iter(self.tags.values().map(|v| String::from(v)))
         }
         pub fn get_amount(&self) -> BigDecimal {
-            self.amount.with_prec(2)
+            self.amount.with_scale(2)
         }
         pub fn get_lifetime(&self) -> &Lifetime {
             &self.lifetime
@@ -216,21 +216,58 @@ pub mod model {
             BigDecimal::from_i64(self.lifetime.get_days_from(&self.starts_on)).unwrap()
         }
         /// Calculates and returns the per diem for the record
+        /// and round it to the 2 decimals
+        ///
+        pub fn per_diem(&self) -> BigDecimal {
+            self.per_diem_raw().with_scale(2)
+        }
+        /// Calculates and returns the per diem for the record
         ///
         /// The per diem is calculated as follow:
         /// END_DAY = START_DAY + (RECURRENCE_SIZE_DAYS * SEC_IN_DAYS  * RECURRENCE_TIMES)
         /// PER_DIEM = AMOUNT * RECURRENCE_TIMES) / (END_DAY - START_DAY )
         ///
-        pub fn per_diem(&self) -> BigDecimal {
+        pub fn per_diem_raw(&self) -> BigDecimal {
             // TODO add inflation?
-            (self.get_amount_total() / self.get_duration_days())
-                .with_scale(100)
-                .with_prec(2)
+            self.get_amount_total() / self.get_duration_days()
         }
+
+        /// Get the progress of the transaction at date
+        ///
+        /// None will use today as a data
+        pub fn get_progress(&self, d: Option<&NaiveDate>) -> (f64, BigDecimal) {
+            let d = match d {
+                Some(d) => *d,
+                None => today(),
+            };
+            // get the time range
+            let tr = (self.starts_on, self.get_ends_on());
+            if d < tr.0 {
+                // if the tx period has not started
+                return (0.0, self.get_amount_total());
+            }
+            if d > tr.1 {
+                // tx period has expired
+                return (100.0, parse_amount("0").unwrap());
+            }
+            // total number of days
+            let n = (tr.1 - tr.0).num_days() as f64;
+            // number of elapsed days
+            let y = (d - tr.0).num_days() as f64;
+
+            // get the total duration
+            (y / n, self.get_amount_total())
+        }
+
         /// Returns the end date (always computed)
         pub fn get_ends_on(&self) -> NaiveDate {
             self.starts_on + Duration::days(self.lifetime.get_days_from(&self.starts_on))
         }
+
+        pub fn is_active_on(&self, target: &NaiveDate) -> bool {
+            self.starts_on <= *target && *target <= self.get_ends_on()
+        }
+
         /// Serialize the record to its string format
         pub fn to_string_record(&self) -> String {
             match &self.src {
