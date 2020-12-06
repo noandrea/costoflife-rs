@@ -32,7 +32,10 @@ build-dist:
 	# cp -r README.md LICENSE $(OUTPUTFOLDER)
 	@echo done
 
-build-zip: build
+install: build-dist
+	mv target/release/$(APP) ~/Applications/bin
+
+build-zip: build-dist
 	@echo build zip release
 	zip -rmT $(APP)-$(GIT_DESCR).zip $(OUTPUTFOLDER)
 	sha1sum $(APP)-$(GIT_DESCR).zip
@@ -47,7 +50,7 @@ lint: lint-all
 
 lint-all:
 	cargo fmt
-	cargo fix
+	# cargo fix
 	cargo clippy
 
 clean:
