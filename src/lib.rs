@@ -4,7 +4,7 @@ use regex::Regex;
 
 lazy_static! {
     static ref RE_CURRENCY: Regex = Regex::new(r"(\d+(\.\d{2})?)\p{Currency_Symbol}").unwrap();
-    static ref RE_HASHTAG: Regex = Regex::new(r"\#([a-zA-Z][0-9a-zA-Z_]*)").unwrap();
+    static ref RE_HASHTAG: Regex = Regex::new(r"[#\.]([a-zA-Z][0-9a-zA-Z_]*)").unwrap();
     static ref RE_LIFETIME: Regex =
         Regex::new(r"(([1-9]{1}[0-9]*)([dwmy]))(([1-9]{1}[0-9]*)x)?").unwrap();
     static ref RE_DATE: Regex = Regex::new(r"([0-3][0-9][0-1][0-9][1-9][0-9])").unwrap();
