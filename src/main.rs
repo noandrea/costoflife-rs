@@ -1,6 +1,8 @@
+use bigdecimal::BigDecimal;
 use blake3;
+use chrono::NaiveDate;
 use clap::{App, Arg};
-use costoflife::model::TxRecord;
+use costoflife::{self, TxRecord};
 use dialoguer::{theme::ColorfulTheme, Confirm};
 use directories::ProjectDirs;
 use std::collections::HashMap;
@@ -11,7 +13,7 @@ use std::io::{self, BufRead, LineWriter, Write};
 use std::path::Path;
 
 fn main() -> Result<(), Box<dyn error::Error>> {
-    println!("Welcome to CostOf.Life!");
+    //println!("Welcome to CostOf.Life!");
 
     let matches = App::new("My Super Program")
         .version("1.0")
@@ -24,6 +26,20 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 .value_name("FILE")
                 .about("Sets a custom config file")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::new("on_date")
+                .short('o')
+                .long("on")
+                .value_name("DATE")
+                .about("use this date to calculate the cost of life")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("quiet")
+                .short('q')
+                .long("quiet")
+                .about("suppress verbose logging"),
         )
         .arg(
             Arg::new("v")
@@ -45,7 +61,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                     Arg::new("EXP_STR")
                         .about("write the expense string")
                         .required(true)
-                        .index(1),
+                        .multiple(true)
+                        .value_terminator("."),
                 ),
         )
         .get_matches();
@@ -53,8 +70,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     // first, see if there is the config dir
     let path = match ProjectDirs::from("com", "FarcastTo", "CostOf.Life") {
         Some(p) => {
-            println!("config dir is {:?}", p.config_dir());
-            println!("data   dir is {:?}", p.data_dir());
+            // println!("config dir is {:?}", p.config_dir());
+            // println!("data   dir is {:?}", p.data_dir());
 
             if !p.data_dir().exists() {
                 let authorized = Confirm::with_theme(&ColorfulTheme::default())
@@ -83,9 +100,10 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     ds.load(path.as_path())?;
     // command line
     if let Some(c) = matches.subcommand_matches("new") {
-        if let Some(tx) = c.value_of("EXP_STR") {
-            let x = TxRecord::from_str(tx).expect("Cannot parse the input string");
-            x.pretty_print();
+        if let Some(values) = c.values_of("EXP_STR") {
+            let v = values.collect::<Vec<&str>>().join(" ");
+            let tx = TxRecord::from_str(&v).expect("Cannot parse the input string");
+            tx.pretty_print();
             // save to the store
             match Confirm::with_theme(&ColorfulTheme::default())
                 .with_prompt("Do you want to save it?")
@@ -93,7 +111,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 .interact()
             {
                 Ok(true) => {
-                    ds.insert(&x);
+                    ds.insert(&tx);
                     ds.save(path.as_path())?;
                     println!("done!")
                 }
@@ -101,7 +119,10 @@ fn main() -> Result<(), Box<dyn error::Error>> {
             }
         };
     }
-
+    println!(
+        "Today CostOf.Life is: {}€",
+        ds.cost_of_life(&costoflife::today())
+    );
     Ok(())
 }
 
@@ -139,6 +160,18 @@ impl DataStore {
         });
         file.flush()?;
         Ok(())
+    }
+
+    fn cost_of_life(&self, d: &NaiveDate) -> BigDecimal {
+        self.data
+            .iter()
+            .filter(|(_k, v)| v.is_active_on(d))
+            .map(|(_k, v)| {
+                //println!("{} {}", v.get_name(), v.per_diem_raw());
+                v.per_diem_raw()
+            })
+            .sum::<BigDecimal>()
+            .with_scale(2)
     }
 
     /// Insert a new tx record
