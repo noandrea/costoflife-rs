@@ -1,10 +1,24 @@
 [package]
 name = "costoflife"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Andrea Giacobino <no.andrea@gmail.com>"]
 edition = "2018"
+license = "MIT"
+description = "The CostOf.Life Calculator"
+repository = "https://github.com/noandrea/costoflife-rs"
+
+
+[package.metadata.wasm-pack.profile.release]
+# wasm-opt = false
+wasm-opt = ['-Oz', '--enable-mutable-globals']
+
+[profile.release]
+lto = true
+opt-level = 's'
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 chrono = "0.4"
@@ -18,3 +32,4 @@ clap = "3.0.0-beta.2"
 directories = "3.0.1"
 dialoguer = "0.7.1"
 blake3 = "0.3.7"
+wasm-bindgen = "0.2.69"

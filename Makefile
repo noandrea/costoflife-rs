@@ -56,6 +56,7 @@ lint-all:
 clean:
 	@echo remove $(OUTPUTFOLDER) folder
 	rm -rf $(OUTPUTFOLDER)
+	rm -rf pkg
 	@echo done
 
 docker: docker-build
@@ -73,6 +74,12 @@ docker-push:
 
 docker-run: 
 	docker run -p 2007:2007 $(DOCKER_IMAGE):latest
+
+wasm-build:
+	wasm-pack build --release
+
+wasm-publish:
+	wasm-pack publish
 
 k8s-deploy:
 	@echo deploy k8s
