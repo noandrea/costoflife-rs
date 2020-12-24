@@ -1,8 +1,8 @@
+use ::costoflife::{self, TxRecord};
 use bigdecimal::BigDecimal;
 use blake3;
 use chrono::NaiveDate;
 use clap::{App, Arg};
-use costoflife::{self, TxRecord};
 use dialoguer::{theme::ColorfulTheme, Confirm};
 use directories::ProjectDirs;
 use std::collections::HashMap;
@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     if let Some(c) = matches.subcommand_matches("new") {
         if let Some(values) = c.values_of("EXP_STR") {
             let v = values.collect::<Vec<&str>>().join(" ");
-            let tx = TxRecord::from_str(&v).expect("Cannot parse the input string");
+            let tx = costoflife::TxRecord::from_str(&v).expect("Cannot parse the input string");
             tx.pretty_print();
             // save to the store
             match Confirm::with_theme(&ColorfulTheme::default())

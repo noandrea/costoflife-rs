@@ -4,7 +4,7 @@ use wasm_bindgen::prelude::*;
 use regex::Regex;
 
 use anyhow::anyhow;
-use bigdecimal::{BigDecimal, FromPrimitive, ParseBigDecimalError};
+use bigdecimal::{BigDecimal, FromPrimitive, ParseBigDecimalError, ToPrimitive};
 use chrono::{DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, Utc};
 use slug::slugify;
 use std::collections::HashMap;
@@ -15,11 +15,16 @@ use std::str::FromStr;
 
 /// Purely for wasm
 #[wasm_bindgen]
-pub fn costoflife_per_diem(s: &str) -> String {
+pub fn costoflife_per_diem(s: &str) -> f32 {
     match TxRecord::from_str(s) {
-        Ok(v) => format!("{}", v.per_diem()),
-        Err(_) => String::from("-1"),
+        Ok(v) => v.per_diem().to_f32().unwrap(),
+        Err(_) => -1.0,
     }
+}
+
+#[wasm_bindgen]
+pub fn costoflife_greetings() -> f32 {
+    42.0
 }
 
 lazy_static! {
@@ -447,14 +452,17 @@ pub fn parse_amount(v: &str) -> Result<BigDecimal, ParseBigDecimalError> {
     BigDecimal::from_str(v)
 }
 
+/// Returns the current date
 pub fn today() -> NaiveDate {
     Utc::today().naive_utc()
 }
 
+/// Returns the datetime with the local timezone
 pub fn now_local() -> DateTime<FixedOffset> {
     DateTime::from(Local::now())
 }
 
+/// Parse a date
 pub fn date(d: u32, m: u32, y: i32) -> NaiveDate {
     NaiveDate::from_ymd(y, m, d)
 }

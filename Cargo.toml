@@ -1,6 +1,6 @@
 [package]
 name = "costoflife"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Andrea Giacobino <no.andrea@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -10,7 +10,9 @@ repository = "https://github.com/noandrea/costoflife-rs"
 
 [package.metadata.wasm-pack.profile.release]
 # wasm-opt = false
-wasm-opt = ['-Oz', '--enable-mutable-globals']
+# wasm-opt = ['-Os', '--enable-mutable-globals']
+wasm-opt = ['-Os']
+
 
 [profile.release]
 lto = true
@@ -18,13 +20,13 @@ opt-level = 's'
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
-chrono = "0.4"
+chrono = "0.4.19"
 bigdecimal = "0.2.0"
 num-bigint = "0.3.1"
-anyhow = "1.0.34"
+anyhow = "1.0.35"
 slug = "0.1.4"
 lazy_static = "1.4.0"
 regex = "1.4.2"
