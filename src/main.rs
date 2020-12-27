@@ -1,10 +1,12 @@
 use ::costoflife::{self, TxRecord};
 use bigdecimal::BigDecimal;
 use blake3;
+use cast::{f64, usize};
 use chrono::NaiveDate;
 use clap::{App, Arg};
 use dialoguer::{theme::ColorfulTheme, Confirm};
 use directories::ProjectDirs;
+use pad::{Alignment, PadStr};
 use std::collections::HashMap;
 use std::error;
 use std::fs;
@@ -65,6 +67,12 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                         .value_terminator("."),
                 ),
         )
+        .subcommand(
+            App::new("summary")
+                .about("print th expenses summary")
+                .version("1.3")
+                .author("<prez@adgb.me>"),
+        )
         .get_matches();
 
     // first, see if there is the config dir
@@ -99,26 +107,69 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     let mut ds = DataStore::new();
     ds.load(path.as_path())?;
     // command line
-    if let Some(c) = matches.subcommand_matches("new") {
-        if let Some(values) = c.values_of("EXP_STR") {
-            let v = values.collect::<Vec<&str>>().join(" ");
-            let tx = costoflife::TxRecord::from_str(&v).expect("Cannot parse the input string");
-            tx.pretty_print();
-            // save to the store
-            match Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt("Do you want to save it?")
-                .default(true)
-                .interact()
-            {
-                Ok(true) => {
-                    ds.insert(&tx);
-                    ds.save(path.as_path())?;
-                    println!("done!")
+    match matches.subcommand() {
+        Some(("new", c)) => {
+            if let Some(values) = c.values_of("EXP_STR") {
+                let v = values.collect::<Vec<&str>>().join(" ");
+                let tx = costoflife::TxRecord::from_str(&v).expect("Cannot parse the input string");
+                tx.pretty_print();
+                // save to the store
+                match Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Do you want to save it?")
+                    .default(true)
+                    .interact()
+                {
+                    Ok(true) => {
+                        ds.insert(&tx);
+                        ds.save(path.as_path())?;
+                        println!("done!")
+                    }
+                    _ => println!("ok, another time"),
                 }
-                _ => println!("ok, another time"),
             }
-        };
+        }
+        Some(("summary", _c)) => {
+            let sizes = (27, 12, 9, 100);
+            // title
+            println!(
+                "{}|{}|{}|{}",
+                "Item".pad(sizes.0, ' ', Alignment::Left, false),
+                "Price".pad(sizes.1, ' ', Alignment::Left, false),
+                "Diem".pad(sizes.2, ' ', Alignment::Left, false),
+                "Progress".pad(sizes.3, ' ', Alignment::Left, false),
+            );
+            // separator
+            println!(
+                "{}|{}|{}|{}",
+                "".pad(sizes.0, '-', Alignment::Right, false),
+                "".pad(sizes.1, '-', Alignment::Right, false),
+                "".pad(sizes.2, '-', Alignment::Right, false),
+                "".pad(sizes.3, '-', Alignment::Right, false),
+            );
+            // data
+            ds.summary(&costoflife::today()).iter().for_each(|v| {
+                // ⧚ ░ ◼ ▪ this are characters that can be used for the bar
+                let perc = v.3 * 100.0; // this is the percentage of completion
+                println!(
+                    "{}|{}|{}|{}",
+                    v.0.pad(sizes.0, ' ', Alignment::Left, true),
+                    format!("{}€", v.1).pad(sizes.1, ' ', Alignment::Right, false),
+                    format!("{}€", v.2).pad(sizes.2, ' ', Alignment::Right, false),
+                    format!("{:.2}", perc).pad(usize(perc).unwrap(), '▮', Alignment::Right, false),
+                )
+            });
+            // separator
+            println!(
+                "{}|{}|{}|{}",
+                "".pad(sizes.0, '-', Alignment::Right, false),
+                "".pad(sizes.1, '-', Alignment::Right, false),
+                "".pad(sizes.2, '-', Alignment::Right, false),
+                "".pad(sizes.3, '-', Alignment::Right, false),
+            );
+        }
+        Some((&_, _)) | None => {}
     }
+
     println!(
         "Today CostOf.Life is: {}€",
         ds.cost_of_life(&costoflife::today())
@@ -164,14 +215,38 @@ impl DataStore {
 
     fn cost_of_life(&self, d: &NaiveDate) -> BigDecimal {
         self.data
+            .iter() // loop through data
+            .filter(|(_k, v)| v.is_active_on(d)) // is still an active expense
+            .map(|(_k, v)| {
+                //println!("{} {}", v.get_name(), v.per_diem_raw());
+                v.per_diem_raw() // get the amount
+            })
+            .sum::<BigDecimal>() // sum all the amount
+            .with_scale(2) // apply the scale
+    }
+
+    /// compile a summary of the active costs, returning a tuple with
+    /// (title, total amount, cost per day, percentage payed)
+    fn summary(&self, d: &NaiveDate) -> Vec<(String, BigDecimal, BigDecimal, f64)> {
+        let mut s = self
+            .data
             .iter()
             .filter(|(_k, v)| v.is_active_on(d))
             .map(|(_k, v)| {
-                //println!("{} {}", v.get_name(), v.per_diem_raw());
-                v.per_diem_raw()
+                let total_len = f64(v.get_duration_days());
+                let completion = f64((*d - v.get_starts_on()).num_days());
+
+                (
+                    String::from(v.get_name()),
+                    v.get_amount_total(),
+                    v.per_diem(),
+                    completion / total_len,
+                )
             })
-            .sum::<BigDecimal>()
-            .with_scale(2)
+            .collect::<Vec<(String, BigDecimal, BigDecimal, f64)>>();
+        // sort the results descending by completion
+        s.sort_by(|a, b| (b.3).partial_cmp(&a.3).unwrap());
+        s
     }
 
     /// Insert a new tx record

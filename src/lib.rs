@@ -79,10 +79,9 @@ pub enum Lifetime {
 impl Lifetime {
     /// Returns the number of days from a given date.
     ///
-    /// This is only significant for months, that have a variable
-    /// size and therefore is necessary to know the start date
-    /// to calculate the number of days
-    pub fn get_days_from(&self, begin: &NaiveDate) -> i64 {
+    /// This is significant con calculate the exact amount
+    /// of days considering months and leap years
+    pub fn get_days_since(&self, begin: &NaiveDate) -> i64 {
         match self {
             Self::Month { amount, times } => {
                 // compute the total number of months (nm)
@@ -111,6 +110,7 @@ impl Lifetime {
         }
     }
 
+    /// Approximates the size of the lifetime
     fn get_days_approx(&self) -> f64 {
         match self {
             Self::Year { amount, times } => 365.25 * f64::from_i64(amount * times).unwrap(),
@@ -225,8 +225,8 @@ impl TxRecord {
         BigDecimal::from_i64(self.lifetime.get_repeats()).unwrap() * &self.amount
     }
     /// Returns the duration in days for this transaction
-    pub fn get_duration_days(&self) -> BigDecimal {
-        BigDecimal::from_i64(self.lifetime.get_days_from(&self.starts_on)).unwrap()
+    pub fn get_duration_days(&self) -> i64 {
+        self.lifetime.get_days_since(&self.starts_on)
     }
     /// Calculates and returns the per diem for the record
     /// and round it to the 2 decimals
@@ -242,7 +242,8 @@ impl TxRecord {
     ///
     pub fn per_diem_raw(&self) -> BigDecimal {
         // TODO add inflation?
-        self.get_amount_total() / self.get_duration_days()
+        let duration_days = BigDecimal::from_i64(self.get_duration_days()).unwrap();
+        self.get_amount_total() / duration_days
     }
 
     /// Get the progress of the transaction at date
@@ -274,7 +275,7 @@ impl TxRecord {
 
     /// Returns the end date (always computed)
     pub fn get_ends_on(&self) -> NaiveDate {
-        self.starts_on + Duration::days(self.lifetime.get_days_from(&self.starts_on))
+        self.starts_on + Duration::days(self.lifetime.get_days_since(&self.starts_on))
     }
 
     pub fn is_active_on(&self, target: &NaiveDate) -> bool {
@@ -606,7 +607,7 @@ mod tests {
                 t.0.parse::<Lifetime>().expect("test_parse_lifetime error"),
                 t.1
             );
-            assert_eq!(t.1.get_days_from(&super::date(1, 1, 2020)), t.2)
+            assert_eq!(t.1.get_days_since(&super::date(1, 1, 2020)), t.2)
         }
     }
 }
