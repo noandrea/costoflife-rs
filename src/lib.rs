@@ -193,7 +193,7 @@ impl TxRecord {
         &self.name[..]
     }
     pub fn get_tags(&self) -> Vec<String> {
-        Vec::from_iter(self.tags.values().map(|v| String::from(v)))
+        Vec::from_iter(self.tags.values().map(String::from))
     }
     pub fn get_amount(&self) -> BigDecimal {
         self.amount.with_scale(2)
@@ -371,9 +371,9 @@ impl TxRecord {
                 .map(|v| (slugify(v), String::from(*v)))
                 .collect(),
             amount: BigDecimal::from_str(amount)?,
-            lifetime: lifetime,
-            recorded_at: recorded_at,
-            starts_on: starts_on,
+            lifetime,
+            recorded_at,
+            starts_on,
             src: match src {
                 Some(s) => Some(String::from(s)),
                 _ => None,

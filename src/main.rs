@@ -1,6 +1,5 @@
 use ::costoflife::{self, TxRecord};
 use bigdecimal::BigDecimal;
-use blake3;
 use cast::{f64, usize};
 use chrono::NaiveDate;
 use clap::{App, Arg};
