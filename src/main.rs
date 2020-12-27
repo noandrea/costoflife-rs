@@ -13,13 +13,15 @@ use std::fs::File;
 use std::io::{self, BufRead, LineWriter, Write};
 use std::path::Path;
 
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 fn main() -> Result<(), Box<dyn error::Error>> {
     //println!("Welcome to CostOf.Life!");
 
-    let matches = App::new("My Super Program")
-        .version("1.0")
-        .author("Kevin K. <kbknapp@gmail.com>")
-        .about("Does awesome things")
+    let matches = App::new("costoflife")
+        .version(VERSION)
+        .author("Andrea G. <no.andrea@gmail.com>")
+        .about("keep track of the cost of your daily life")
         .arg(
             Arg::new("config")
                 .short('c')
