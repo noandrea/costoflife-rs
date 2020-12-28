@@ -2,6 +2,16 @@
 ## [Unreleased]
 
 
+<a name="0.2.1"></a>
+## [0.2.1] - 2020-12-28
+### Fix
+- **cli:** honour the "--on" parameter
+- **cli:** print the correct app name and version
+
+### Test
+- **lib:** add more tests for the lib part
+
+
 <a name="0.2.0"></a>
 ## [0.2.0] - 2020-12-27
 ### Chore
@@ -40,7 +50,8 @@
 <a name="0.1.0"></a>
 ## 0.1.0 - 2020-11-30
 
-[Unreleased]: https://github.com/noandrea/costoflife-rs/compare/0.2.0...HEAD
+[Unreleased]: https://github.com/noandrea/costoflife-rs/compare/0.2.1...HEAD
+[0.2.1]: https://github.com/noandrea/costoflife-rs/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/noandrea/costoflife-rs/compare/0.1.2...0.2.0
 [0.1.2]: https://github.com/noandrea/costoflife-rs/compare/0.1.1...0.1.2
 [0.1.1]: https://github.com/noandrea/costoflife-rs/compare/0.1.0...0.1.1
