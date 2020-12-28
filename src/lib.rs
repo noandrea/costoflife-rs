@@ -1,8 +1,3 @@
-use lazy_static::lazy_static;
-use wasm_bindgen::prelude::*;
-
-use regex::Regex;
-
 use anyhow::anyhow;
 use bigdecimal::{BigDecimal, FromPrimitive, ParseBigDecimalError, ToPrimitive};
 use chrono::{DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, Utc};
@@ -319,32 +314,6 @@ impl TxRecord {
         Ok(tx)
     }
 
-    /// Pretty print to stdout
-    ///
-    pub fn pretty_print(&self) {
-        println!(
-            "Name     : {} #[{}]",
-            self.get_name(),
-            self.get_tags().join(",")
-        );
-        match self.amount_is_total() {
-            true => println!("Amount   : {}", self.get_amount()),
-            _ => {
-                println!(
-                    "Amount   : {} (Total: {})",
-                    self.get_amount(),
-                    self.get_amount_total()
-                )
-            }
-        }
-        println!(
-            "From / To: {} / {}",
-            self.get_starts_on(),
-            self.get_ends_on()
-        );
-        println!("Per Diem : {}", self.per_diem());
-    }
-
     pub fn new(name: &str, amount: &str) -> Result<TxRecord, anyhow::Error> {
         TxRecord::from(
             name,
@@ -480,34 +449,131 @@ pub fn date_from_str(s: &str) -> Result<NaiveDate, chrono::ParseError> {
 mod tests {
     use super::Lifetime;
     use super::TxRecord;
+    use chrono::Duration;
+
+    #[test]
+    fn test_getters() {
+        let tests = vec![
+            (
+                // create by parsing
+                TxRecord::from_str("Something we bought 1000€ #nice #living 100d").unwrap(),
+                (
+                    "Something we bought",                                  // title
+                    super::today(),                                         // starts_on
+                    (super::today() + Duration::days(100)),                 // ends_on
+                    100,                                                    // duration days
+                    vec![("nice", true), ("living", true), ("car", false)], // tags
+                    (super::today(), true),                                 // is active
+                    super::parse_amount("10").unwrap(),                     // per diem
+                    (super::today(), 0.0 as f64),                           // progress
+                ),
+            ),
+            // create using from
+            (
+                TxRecord::from(
+                    "Car",
+                    vec!["transportation", "lifestyle"],
+                    "100000",
+                    super::date(01, 01, 2010),
+                    Lifetime::Year {
+                        amount: 20,
+                        times: 1,
+                    },
+                    super::now_local(),
+                    None,
+                )
+                .unwrap(),
+                (
+                    "Car",
+                    super::date(01, 01, 2010),
+                    (super::date(01, 01, 2010) + Duration::days(7304)),
+                    7304,
+                    vec![
+                        ("nice", false),
+                        ("living", false),
+                        ("car", false),
+                        ("transportation", true),
+                        ("lifestyle", true),
+                    ],
+                    (super::date(02, 01, 2030), false),
+                    super::parse_amount("13.69").unwrap(),
+                    (super::date(01, 10, 2020), 0.537513691128149 as f64),
+                ),
+            ),
+            (
+                // creae using new
+                TxRecord::new("Building", "1000000").unwrap(),
+                (
+                    "Building",
+                    super::today(),
+                    (super::today() + Duration::days(1)),
+                    1,
+                    vec![
+                        ("nice", false),
+                        ("living", false),
+                        ("car", false),
+                        ("transportation", false),
+                        ("lifestyle", false),
+                    ],
+                    (super::today(), true),
+                    super::parse_amount("1000000").unwrap(),
+                    (super::today(), 0.0 as f64),
+                ),
+            ),
+        ];
+
+        // run the test cases
+
+        for (i, t) in tests.iter().enumerate() {
+            println!("test_getters#{}", i);
+            let (got, expected) = t;
+            assert_eq!(got.get_name(), expected.0);
+            assert_eq!(got.get_starts_on(), expected.1);
+            assert_eq!(got.get_ends_on(), expected.2);
+            assert_eq!(got.get_duration_days(), expected.3);
+            // check the tags
+            expected
+                .4
+                .iter()
+                .for_each(|(tag, exists)| assert_eq!(got.has_tag(tag), *exists));
+            // is active
+            let (target_date, is_active) = expected.5;
+            assert_eq!(got.is_active_on(&target_date), is_active);
+            // per diem
+            assert_eq!(got.per_diem(), expected.6);
+            // progress
+            let (on_date, progress) = expected.7;
+            assert_eq!(got.get_progress(Some(&on_date)), progress);
+        }
+    }
 
     #[test]
     fn test_parse_transaction() {
         let tests = vec![
             (
-                "AKU Bellamont 3 Suede Low GTX 2020 #vestiti 129.95€ 3y",
+                "Shoes #clothing 229.95€ 3y",
                 TxRecord::from(
-                    "AKU Bellamont 3 Suede Low GTX 2020",
-                    vec!["vestiti"],
-                    "129.95",
+                    "Shoes",
+                    vec!["clothing"],
+                    "229.95",
                     super::today(),
                     Lifetime::Year {
                         amount: 3,
                         times: 1,
                     },
                     super::now_local(),
-                    Some("AKU Bellamont 3 Suede Low GTX 2020 #vestiti 129.95€ 3y"),
+                    Some("Shoes #clothing 229.95€ 3y"),
                 )
                 .unwrap(),
-                super::parse_amount("0.12").unwrap(),
+                (super::parse_amount("0.21").unwrap(), 0.0 as f64),
             ),
             (
-                "Rent 729€ 1m12x 010120 #rent",
+                "Rent 1729€ 1m12x 010118 #rent",
                 TxRecord::from(
                     "Rent",
                     vec!["rent"],
-                    "729",
-                    super::date(1, 1, 2020),
+                    "1729",
+                    super::date(1, 1, 2018),
                     Lifetime::Month {
                         amount: 1,
                         times: 12,
@@ -516,7 +582,7 @@ mod tests {
                     None,
                 )
                 .unwrap(),
-                super::parse_amount("24").unwrap(),
+                (super::parse_amount("57.00").unwrap(), 100.0 as f64),
             ),
             (
                 "Tea 20€ 2m1x 010120 #food",
@@ -533,7 +599,7 @@ mod tests {
                     None,
                 )
                 .unwrap(),
-                super::parse_amount("0.34").unwrap(),
+                (super::parse_amount("0.33").unwrap(), 100.0 as f64),
             ),
             (
                 "Tea 20€ 1m2x 010120 #food",
@@ -550,7 +616,7 @@ mod tests {
                     None,
                 )
                 .unwrap(),
-                super::parse_amount("0.68").unwrap(),
+                (super::parse_amount("0.67").unwrap(), 100.0 as f64),
             ),
         ];
 
@@ -560,7 +626,9 @@ mod tests {
                 t.0.parse::<TxRecord>().expect("test_parse_tx_record error"),
                 t.1
             );
-            assert_eq!(t.1.per_diem(), t.2)
+            let (per_diem, progress) = &t.2;
+            assert_eq!(t.1.per_diem(), *per_diem);
+            assert_eq!(t.1.get_progress(None), *progress);
         }
     }
 

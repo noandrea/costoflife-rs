@@ -117,7 +117,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
             if let Some(values) = c.values_of("EXP_STR") {
                 let v = values.collect::<Vec<&str>>().join(" ");
                 let tx = costoflife::TxRecord::from_str(&v).expect("Cannot parse the input string");
-                tx.pretty_print();
+                pretty_print(&tx);
                 // save to the store
                 match Confirm::with_theme(&ColorfulTheme::default())
                     .with_prompt("Do you want to save it?")
@@ -281,4 +281,25 @@ impl DataStore {
         );
         blake3::hash(fields.as_bytes())
     }
+}
+
+/// Pretty print to stdout a transaction
+fn pretty_print(tx: &TxRecord) {
+    println!(
+        "Name     : {} #[{}]",
+        tx.get_name(),
+        tx.get_tags().join(",")
+    );
+    match tx.amount_is_total() {
+        true => println!("Amount   : {}", tx.get_amount()),
+        _ => {
+            println!(
+                "Amount   : {} (Total: {})",
+                tx.get_amount(),
+                tx.get_amount_total()
+            )
+        }
+    }
+    println!("From / To: {} / {}", tx.get_starts_on(), tx.get_ends_on());
+    println!("Per Diem : {}", tx.per_diem());
 }
