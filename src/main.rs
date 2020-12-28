@@ -1,6 +1,5 @@
 use ::costoflife::{self, TxRecord};
 use bigdecimal::BigDecimal;
-use cast::{f64, usize};
 use chrono::NaiveDate;
 use clap::{App, Arg};
 use dialoguer::{theme::ColorfulTheme, Confirm};
@@ -13,7 +12,7 @@ use std::fs::File;
 use std::io::{self, BufRead, LineWriter, Write};
 use std::path::Path;
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> Result<(), Box<dyn error::Error>> {
     //println!("Welcome to CostOf.Life!");
@@ -107,6 +106,11 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     // load the datastores
     let mut ds = DataStore::new();
     ds.load(path.as_path())?;
+    // get the date
+    let target_date = match matches.value_of("on_date") {
+        Some(v) => costoflife::date_from_str(v).expect("The date provided is not valid"),
+        None => costoflife::today(),
+    };
     // command line
     match matches.subcommand() {
         Some(("new", c)) => {
@@ -148,7 +152,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 "".pad(sizes.3, '-', Alignment::Right, false),
             );
             // data
-            ds.summary(&costoflife::today()).iter().for_each(|v| {
+            ds.summary(&target_date).iter().for_each(|v| {
                 // ⧚ ░ ◼ ▪ this are characters that can be used for the bar
                 let perc = v.3 * 100.0; // this is the percentage of completion
                 println!(
@@ -156,7 +160,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                     v.0.pad(sizes.0, ' ', Alignment::Left, true),
                     format!("{}€", v.1).pad(sizes.1, ' ', Alignment::Right, false),
                     format!("{}€", v.2).pad(sizes.2, ' ', Alignment::Right, false),
-                    format!("{:.2}", perc).pad(usize(perc).unwrap(), '▮', Alignment::Right, false),
+                    format!("{:.2}", perc).pad(perc as usize, '▮', Alignment::Right, false),
                 )
             });
             // separator
@@ -171,10 +175,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         Some((&_, _)) | None => {}
     }
 
-    println!(
-        "Today CostOf.Life is: {}€",
-        ds.cost_of_life(&costoflife::today())
-    );
+    println!("Today CostOf.Life is: {}€", ds.cost_of_life(&target_date));
     Ok(())
 }
 
@@ -234,14 +235,11 @@ impl DataStore {
             .iter()
             .filter(|(_k, v)| v.is_active_on(d))
             .map(|(_k, v)| {
-                let total_len = f64(v.get_duration_days());
-                let completion = f64((*d - v.get_starts_on()).num_days());
-
                 (
                     String::from(v.get_name()),
                     v.get_amount_total(),
                     v.per_diem(),
-                    completion / total_len,
+                    v.get_progress(Some(d)),
                 )
             })
             .collect::<Vec<(String, BigDecimal, BigDecimal, f64)>>();

@@ -6,12 +6,15 @@ use regex::Regex;
 use anyhow::anyhow;
 use bigdecimal::{BigDecimal, FromPrimitive, ParseBigDecimalError, ToPrimitive};
 use chrono::{DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, Utc};
+use lazy_static::lazy_static;
+use regex::Regex;
 use slug::slugify;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::iter::FromIterator;
 use std::str::FromStr;
+use wasm_bindgen::prelude::*;
 
 /// Purely for wasm
 #[wasm_bindgen]
@@ -249,28 +252,27 @@ impl TxRecord {
     /// Get the progress of the transaction at date
     ///
     /// None will use today as a data
-    pub fn get_progress(&self, d: Option<&NaiveDate>) -> (f64, BigDecimal) {
+    pub fn get_progress(&self, d: Option<&NaiveDate>) -> f64 {
         let d = match d {
             Some(d) => *d,
             None => today(),
         };
         // get the time range
-        let tr = (self.starts_on, self.get_ends_on());
-        if d < tr.0 {
+        let (start, end) = (self.starts_on, self.get_ends_on());
+        if d <= start {
             // if the tx period has not started
-            return (0.0, self.get_amount_total());
+            return 0.0;
         }
-        if d > tr.1 {
+        if d >= end {
             // tx period has expired
-            return (100.0, parse_amount("0").unwrap());
+            return 100.0;
         }
         // total number of days
-        let n = (tr.1 - tr.0).num_days() as f64;
+        let n = (end - start).num_days() as f64;
         // number of elapsed days
-        let y = (d - tr.0).num_days() as f64;
-
-        // get the total duration
-        (y / n, self.get_amount_total())
+        let y = (d - start).num_days() as f64;
+        // duration percentage
+        y / n
     }
 
     /// Returns the end date (always computed)
@@ -466,6 +468,12 @@ pub fn now_local() -> DateTime<FixedOffset> {
 /// Parse a date
 pub fn date(d: u32, m: u32, y: i32) -> NaiveDate {
     NaiveDate::from_ymd(y, m, d)
+}
+
+/// Parse a date from string, the string should be formatted
+/// as dd/mm/yyyy
+pub fn date_from_str(s: &str) -> Result<NaiveDate, chrono::ParseError> {
+    NaiveDate::parse_from_str(s, "%d/%m/%Y")
 }
 
 #[cfg(test)]
