@@ -79,28 +79,25 @@ impl Lifetime {
     ///
     /// This is significant con calculate the exact amount
     /// of days considering months and leap years
-    pub fn get_days_since(&self, begin: &NaiveDate) -> i64 {
+    pub fn get_days_since(&self, since: &NaiveDate) -> i64 {
         match self {
             Self::Month { amount, times } => {
                 // compute the total number of months (nm)
-                let nm = begin.month() + u32::try_from(times * amount).unwrap();
+                let nm = since.month() + (times * amount) as u32;
                 // match nm (number of months) and calculate the end year / month
-                let ym = match nm {
-                    12 => (begin.year_ce().1, 12),
-                    nm => (begin.year_ce().1 + nm / 12, nm % 12),
-                };
+                let (y, m) = (since.year() as u32 + nm / 12, nm % 12);
                 // wrap the result with the correct type
-                let eymd = (i32::try_from(ym.0).unwrap(), ym.1, begin.day());
+                let (y, m, d) = (y as i32, m, since.day());
                 // calculate the end date
-                let end = NaiveDate::from_ymd(eymd.0, eymd.1, eymd.2) - Duration::days(1);
+                let end = NaiveDate::from_ymd(y, m, d);
                 // count the days
-                end.signed_duration_since(*begin).num_days()
+                end.signed_duration_since(*since).num_days()
             }
             Self::Year { amount, times } => {
-                let ny = begin.year() + i32::try_from(times * amount).unwrap();
-                let end = NaiveDate::from_ymd(ny, begin.month(), begin.day()) - Duration::days(1);
+                let ny = since.year() + (times * amount) as i32;
+                let end = NaiveDate::from_ymd(ny, since.month(), since.day());
                 // count the days
-                end.signed_duration_since(*begin).num_days()
+                end.signed_duration_since(*since).num_days()
             }
             Self::Week { amount, times } => amount * 7 * times,
             Self::Day { amount, times } => amount * times,
@@ -133,23 +130,23 @@ impl Lifetime {
 impl FromStr for Lifetime {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Lifetime, anyhow::Error> {
-        let lifetime = extract_lifetime(s);
-        match lifetime.0 {
+        let (period, amount, repeats) = extract_lifetime(s);
+        match period {
             "d" => Ok(Lifetime::Day {
-                amount: lifetime.1,
-                times: lifetime.2,
+                amount: amount,
+                times: repeats,
             }),
             "w" => Ok(Lifetime::Week {
-                amount: lifetime.1,
-                times: lifetime.2,
+                amount: amount,
+                times: repeats,
             }),
             "y" => Ok(Lifetime::Year {
-                amount: lifetime.1,
-                times: lifetime.2,
+                amount: amount,
+                times: repeats,
             }),
             "m" => Ok(Lifetime::Month {
-                amount: lifetime.1,
-                times: lifetime.2,
+                amount: amount,
+                times: repeats,
             }),
             _ => Err(anyhow!("invalid value {}", s)),
         }
@@ -239,7 +236,6 @@ impl TxRecord {
     /// PER_DIEM = AMOUNT * RECURRENCE_TIMES) / (END_DAY - START_DAY )
     ///
     pub fn per_diem_raw(&self) -> BigDecimal {
-        // TODO add inflation?
         let duration_days = BigDecimal::from_i64(self.get_duration_days()).unwrap();
         self.get_amount_total() / duration_days
     }
@@ -486,8 +482,8 @@ mod tests {
                 (
                     "Car",
                     super::date(01, 01, 2010),
-                    (super::date(01, 01, 2010) + Duration::days(7304)),
-                    7304,
+                    (super::date(01, 01, 2010) + Duration::days(7305)),
+                    7305,
                     vec![
                         ("nice", false),
                         ("living", false),
@@ -496,12 +492,12 @@ mod tests {
                         ("lifestyle", true),
                     ],
                     (super::date(02, 01, 2030), false),
-                    super::parse_amount("13.69").unwrap(),
-                    (super::date(01, 10, 2020), 0.537513691128149 as f64),
+                    super::parse_amount("13.68").unwrap(),
+                    (super::date(01, 10, 2020), 0.5374401095140315 as f64),
                 ),
             ),
             (
-                // creae using new
+                // create using new
                 TxRecord::new("Building", "1000000").unwrap(),
                 (
                     "Building",
@@ -582,7 +578,7 @@ mod tests {
                     None,
                 )
                 .unwrap(),
-                (super::parse_amount("57.00").unwrap(), 100.0 as f64),
+                (super::parse_amount("56.84").unwrap(), 100.0 as f64),
             ),
             (
                 "Tea 20€ 2m1x 010120 #food",
@@ -616,7 +612,7 @@ mod tests {
                     None,
                 )
                 .unwrap(),
-                (super::parse_amount("0.67").unwrap(), 100.0 as f64),
+                (super::parse_amount("0.66").unwrap(), 100.0 as f64),
             ),
         ];
 
@@ -652,6 +648,30 @@ mod tests {
                 10,
             ),
             (
+                "10d10x",
+                Lifetime::Day {
+                    amount: 10,
+                    times: 10,
+                },
+                100,
+            ),
+            (
+                "1w1x",
+                Lifetime::Week {
+                    amount: 1,
+                    times: 1,
+                },
+                7,
+            ),
+            (
+                "7w",
+                Lifetime::Week {
+                    amount: 7,
+                    times: 1,
+                },
+                49,
+            ),
+            (
                 "10w10x",
                 Lifetime::Week {
                     amount: 10,
@@ -660,12 +680,20 @@ mod tests {
                 700,
             ),
             (
+                "20y",
+                Lifetime::Year {
+                    amount: 20,
+                    times: 1,
+                },
+                7305,
+            ),
+            (
                 "1y20x",
                 Lifetime::Year {
                     amount: 1,
                     times: 20,
                 },
-                7304,
+                7305,
             ),
             (
                 "1y",
@@ -673,17 +701,47 @@ mod tests {
                     amount: 1,
                     times: 1,
                 },
-                365,
+                366,
+            ),
+            (
+                "1m",
+                Lifetime::Month {
+                    amount: 1,
+                    times: 1,
+                },
+                31,
+            ),
+            (
+                "12m",
+                Lifetime::Month {
+                    amount: 12,
+                    times: 1,
+                },
+                366,
+            ),
+            (
+                "1m12x",
+                Lifetime::Month {
+                    amount: 1,
+                    times: 12,
+                },
+                366,
             ),
         ];
 
         for (i, t) in tests.iter().enumerate() {
             println!("test_parse_lifetime#{}", i);
+
+            let (lifetime_str, lifetime_exp, days) = t;
+
             assert_eq!(
-                t.0.parse::<Lifetime>().expect("test_parse_lifetime error"),
-                t.1
+                lifetime_str
+                    .parse::<Lifetime>()
+                    .expect("test_parse_lifetime error"),
+                *lifetime_exp,
             );
-            assert_eq!(t.1.get_days_since(&super::date(1, 1, 2020)), t.2)
+            // this make sense only with the assertion above
+            assert_eq!(lifetime_exp.get_days_since(&super::date(1, 1, 2020)), *days)
         }
     }
 }
