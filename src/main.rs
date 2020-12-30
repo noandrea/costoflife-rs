@@ -288,7 +288,11 @@ fn pretty_print(tx: &TxRecord) {
     println!(
         "Name     : {} #[{}]",
         tx.get_name(),
-        tx.get_tags().join(",")
+        tx.get_tags()
+            .iter()
+            .map(String::from)
+            .collect::<Vec<String>>()
+            .join(",")
     );
     match tx.amount_is_total() {
         true => println!("Amount   : {}", tx.get_amount()),

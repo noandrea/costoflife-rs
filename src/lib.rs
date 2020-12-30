@@ -4,10 +4,8 @@ use chrono::{DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, Utc};
 use lazy_static::lazy_static;
 use regex::Regex;
 use slug::slugify;
-use std::collections::HashMap;
-use std::convert::TryFrom;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt;
-use std::iter::FromIterator;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
@@ -187,21 +185,27 @@ impl TxRecord {
     pub fn get_name(&self) -> &str {
         &self.name[..]
     }
-    pub fn get_tags(&self) -> Vec<String> {
-        Vec::from_iter(self.tags.values().map(String::from))
+    /// Get the tags for the tx, sorted alphabetically
+    pub fn get_tags(&self) -> BTreeSet<String> {
+        self.tags.values().map(String::from).collect()
     }
+    /// Get the amount for the tx, rounded to 2 decimals
     pub fn get_amount(&self) -> BigDecimal {
         self.amount.with_scale(2)
     }
+    /// Get the lifetime for the tx
     pub fn get_lifetime(&self) -> &Lifetime {
         &self.lifetime
     }
+    /// Get the start date for the tx
     pub fn get_starts_on(&self) -> NaiveDate {
         self.starts_on
     }
+    /// Get the datetime when the tx was recorded
     pub fn get_recorded_at(&self) -> &DateTime<FixedOffset> {
         &self.recorded_at
     }
+    /// Get the datetime when the tx was recorded as a rfc3339 string
     pub fn get_recorded_at_rfc3339(&self) -> String {
         self.recorded_at.to_rfc3339()
     }
