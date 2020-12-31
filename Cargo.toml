@@ -27,7 +27,6 @@ crate-type = ["cdylib", "lib"]
 chrono = "0.4.19"
 bigdecimal = "0.2.0"
 num-bigint = "0.3.1"
-anyhow = "1.0.35"
 slug = "0.1.4"
 lazy_static = "1.4.0"
 regex = "1.4.2"

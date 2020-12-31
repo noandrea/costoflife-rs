@@ -1,10 +1,10 @@
-use anyhow::anyhow;
-use bigdecimal::{BigDecimal, FromPrimitive, ParseBigDecimalError, ToPrimitive};
+use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive, Zero};
 use chrono::{DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, Utc};
 use lazy_static::lazy_static;
 use regex::Regex;
 use slug::slugify;
 use std::collections::{BTreeSet, HashMap};
+use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
@@ -23,6 +23,38 @@ pub fn costoflife_greetings() -> f32 {
     42.0
 }
 
+// Let's use generic errors
+type Result<T> = std::result::Result<T, CostOfLifeError>;
+
+#[derive(Debug, Clone)]
+pub enum CostOfLifeError {
+    InvalidLifetimeFormat(String),
+    InvalidDateFormat(String),
+    InvalidAmount(String),
+    GenericError(String),
+}
+
+impl fmt::Display for CostOfLifeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "error in costoflife")
+    }
+}
+
+impl From<chrono::ParseError> for CostOfLifeError {
+    fn from(error: chrono::ParseError) -> Self {
+        CostOfLifeError::InvalidDateFormat(error.to_string())
+    }
+}
+
+impl From<bigdecimal::ParseBigDecimalError> for CostOfLifeError {
+    fn from(error: bigdecimal::ParseBigDecimalError) -> Self {
+        CostOfLifeError::InvalidDateFormat(error.to_string())
+    }
+}
+
+impl Error for CostOfLifeError {}
+
+// initialize regexp
 lazy_static! {
     static ref RE_CURRENCY: Regex = Regex::new(r"(\d+(\.\d{2})?)\p{Currency_Symbol}").unwrap();
     static ref RE_HASHTAG: Regex = Regex::new(r"[#\.]([a-zA-Z][0-9a-zA-Z_]*)").unwrap();
@@ -30,8 +62,6 @@ lazy_static! {
         Regex::new(r"(([1-9]{1}[0-9]*)([dwmy]))(([1-9]{1}[0-9]*)x)?").unwrap();
     static ref RE_DATE: Regex = Regex::new(r"([0-3][0-9][0-1][0-9][1-9][0-9])").unwrap();
 }
-
-// ex "AKU Bellamont 3 Suede Low GTX 2020 #vestiti 129.95€ 3y"
 
 fn extract_amount(input: &str) -> Option<&str> {
     RE_CURRENCY
@@ -126,27 +156,19 @@ impl Lifetime {
 }
 
 impl FromStr for Lifetime {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Lifetime, anyhow::Error> {
-        let (period, amount, repeats) = extract_lifetime(s);
+    type Err = CostOfLifeError;
+
+    fn from_str(s: &str) -> Result<Lifetime> {
+        let (period, amount, times) = extract_lifetime(s);
         match period {
-            "d" => Ok(Lifetime::Day {
-                amount: amount,
-                times: repeats,
-            }),
-            "w" => Ok(Lifetime::Week {
-                amount: amount,
-                times: repeats,
-            }),
-            "y" => Ok(Lifetime::Year {
-                amount: amount,
-                times: repeats,
-            }),
-            "m" => Ok(Lifetime::Month {
-                amount: amount,
-                times: repeats,
-            }),
-            _ => Err(anyhow!("invalid value {}", s)),
+            "d" => Ok(Lifetime::Day { amount, times }),
+            "w" => Ok(Lifetime::Week { amount, times }),
+            "y" => Ok(Lifetime::Year { amount, times }),
+            "m" => Ok(Lifetime::Month { amount, times }),
+            _ => Err(CostOfLifeError::InvalidLifetimeFormat(format!(
+                "invalid format {}",
+                s
+            ))),
         }
     }
 }
@@ -247,7 +269,7 @@ impl TxRecord {
     /// Get the progress of the transaction at date
     ///
     /// None will use today as a data
-    pub fn get_progress(&self, d: Option<&NaiveDate>) -> f64 {
+    pub fn get_progress(&self, d: &Option<NaiveDate>) -> f64 {
         let d = match d {
             Some(d) => *d,
             None => today(),
@@ -294,11 +316,11 @@ impl TxRecord {
                 "{}::{}::{} {}€ {} {}\n",
                 self.get_recorded_at_rfc3339(),
                 self.get_starts_on(),
-                self.name,
+                self.get_name(),
                 self.get_amount(),
-                self.lifetime,
+                self.get_lifetime(),
                 self.get_tags()
-                    .into_iter()
+                    .iter()
                     .map(|t| format!("#{}", t))
                     .collect::<Vec<String>>()
                     .join(" ")
@@ -306,7 +328,7 @@ impl TxRecord {
         }
     }
     // Deserialize the record from
-    pub fn from_string_record(s: &str) -> Result<TxRecord, Box<dyn std::error::Error>> {
+    pub fn from_string_record(s: &str) -> Result<TxRecord> {
         let abc = s.trim().splitn(3, "::").collect::<Vec<&str>>();
         let mut tx = Self::from_str(abc[2])?;
         tx.starts_on = NaiveDate::from_str(abc[1])?;
@@ -314,7 +336,7 @@ impl TxRecord {
         Ok(tx)
     }
 
-    pub fn new(name: &str, amount: &str) -> Result<TxRecord, anyhow::Error> {
+    pub fn new(name: &str, amount: &str) -> Result<TxRecord> {
         TxRecord::from(
             name,
             Vec::new(),
@@ -334,8 +356,8 @@ impl TxRecord {
         lifetime: Lifetime,
         recorded_at: DateTime<FixedOffset>,
         src: Option<&str>,
-    ) -> Result<TxRecord, anyhow::Error> {
-        Ok(TxRecord {
+    ) -> Result<TxRecord> {
+        let tx = TxRecord {
             name: String::from(name.trim()),
             tags: tags
                 .iter()
@@ -349,10 +371,18 @@ impl TxRecord {
                 Some(s) => Some(String::from(s)),
                 _ => None,
             },
-        })
+        };
+        // validate the amount
+        if tx.get_amount() <= BigDecimal::zero() {
+            return Err(CostOfLifeError::InvalidAmount(
+                format! {"amount should be a positive number: {}", amount},
+            ));
+        }
+        // all good
+        Ok(tx)
     }
 
-    pub fn from_str(s: &str) -> Result<TxRecord, anyhow::Error> {
+    pub fn from_str(s: &str) -> Result<TxRecord> {
         // make an empty record
         let mut name: Vec<&str> = Vec::new();
         let mut amount = "0";
@@ -398,8 +428,8 @@ impl TxRecord {
 }
 
 impl FromStr for TxRecord {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<TxRecord, anyhow::Error> {
+    type Err = CostOfLifeError;
+    fn from_str(s: &str) -> Result<TxRecord> {
         TxRecord::from_str(s)
     }
 }
@@ -420,8 +450,8 @@ impl PartialEq for TxRecord {
     }
 }
 
-pub fn parse_amount(v: &str) -> Result<BigDecimal, ParseBigDecimalError> {
-    BigDecimal::from_str(v)
+pub fn parse_amount(v: &str) -> Result<BigDecimal> {
+    Ok(BigDecimal::from_str(v)?)
 }
 
 /// Returns the current date
@@ -441,14 +471,13 @@ pub fn date(d: u32, m: u32, y: i32) -> NaiveDate {
 
 /// Parse a date from string, the string should be formatted
 /// as dd/mm/yyyy
-pub fn date_from_str(s: &str) -> Result<NaiveDate, chrono::ParseError> {
-    NaiveDate::parse_from_str(s, "%d/%m/%Y")
+pub fn date_from_str(s: &str) -> Result<NaiveDate> {
+    Ok(NaiveDate::parse_from_str(s, "%d/%m/%Y")?)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Lifetime;
-    use super::TxRecord;
+    use super::{Lifetime, TxRecord};
     use chrono::Duration;
 
     #[test]
@@ -456,20 +485,81 @@ mod tests {
         let tests = vec![
             (
                 // create by parsing
-                TxRecord::from_str("Something we bought 1000€ #nice #living 100d").unwrap(),
+                TxRecord::from_str("Something we bought 1000€ #nice #living 100d"),
                 (
+                    Ok(()),                                                 // ok/error
                     "Something we bought",                                  // title
                     super::today(),                                         // starts_on
-                    (super::today() + Duration::days(100)),                 // ends_on
+                    (super::today() + Duration::days(99)),                  // ends_on
                     100,                                                    // duration days
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (super::today(), true),                                 // is active
                     super::parse_amount("10").unwrap(),                     // per diem
-                    (super::today(), 0.0 as f64),                           // progress
+                    (Some(super::today()), 0.0 as f64), // progress                                                 // PARSE ERROR
                 ),
             ),
-            // create using from
             (
+                // create by parsing (same but with parse)
+                "Something we bought 1000€ #nice #living 100d".parse::<TxRecord>(),
+                (
+                    Ok(()),                                                 // ok/error
+                    "Something we bought",                                  // title
+                    super::today(),                                         // starts_on
+                    (super::today() + Duration::days(99)),                  // ends_on
+                    100,                                                    // duration days
+                    vec![("nice", true), ("living", true), ("car", false)], // tags
+                    (super::today(), true),                                 // is active
+                    super::parse_amount("10").unwrap(),                     // per diem
+                    (Some(super::today()), 0.0 as f64), // progress                                                 // PARSE ERROR
+                ),
+            ),
+            (
+                // create by parsing WITH ERROR
+                TxRecord::from_str("we bought nothing #nice #living 100d"),
+                (
+                    Err(()),                                                // ok/error
+                    "Something we bought",                                  // title
+                    super::today(),                                         // starts_on
+                    (super::today() + Duration::days(99)),                  // ends_on
+                    100,                                                    // duration days
+                    vec![("nice", true), ("living", true), ("car", false)], // tags
+                    (super::today(), true),                                 // is active
+                    super::parse_amount("10").unwrap(),                     // per diem
+                    (Some(super::today()), 0.0 as f64),                     // progress
+                ),
+            ),
+            (
+                // from string with date
+                TxRecord::from_str("Rent 1729€ 1m12x 010118 #rent"),
+                (
+                    Ok(()),                                // ok/error
+                    "Rent",                                // title
+                    super::date(1, 1, 2018),               // starts_on
+                    (super::date(31, 12, 2018)),           // ends_on
+                    365,                                   // duration days
+                    vec![("home", false), ("rent", true)], // tags
+                    (super::today(), false),               // is active
+                    super::parse_amount("56.84").unwrap(), // per diem
+                    (None, 1.0 as f64),                    // progress
+                ),
+            ),
+            (
+                // from string with WRONG date
+                TxRecord::from_str("Rent 1729€ 1m12x 320118 #rent"),
+                (
+                    Err(()),                               // ok/error
+                    "Rent",                                // title
+                    super::date(1, 1, 18),                 // starts_on
+                    (super::date(31, 12, 18)),             // ends_on
+                    365,                                   // duration days
+                    vec![("home", false), ("rent", true)], // tags
+                    (super::today(), false),               // is active
+                    super::parse_amount("58.84").unwrap(), // per diem
+                    (None, 1.0 as f64),                    // progress
+                ),
+            ),
+            (
+                // create using from
                 TxRecord::from(
                     "Car",
                     vec!["transportation", "lifestyle"],
@@ -481,12 +571,12 @@ mod tests {
                     },
                     super::now_local(),
                     None,
-                )
-                .unwrap(),
+                ),
                 (
+                    Ok(()),
                     "Car",
                     super::date(01, 01, 2010),
-                    (super::date(01, 01, 2010) + Duration::days(7305)),
+                    (super::date(31, 12, 2029)),
                     7305,
                     vec![
                         ("nice", false),
@@ -495,18 +585,19 @@ mod tests {
                         ("transportation", true),
                         ("lifestyle", true),
                     ],
-                    (super::date(02, 01, 2030), false),
+                    (super::date(01, 01, 2030), false),
                     super::parse_amount("13.68").unwrap(),
-                    (super::date(01, 10, 2020), 0.5374401095140315 as f64),
+                    (Some(super::date(01, 10, 2020)), 0.537513691128149 as f64),
                 ),
             ),
             (
                 // create using new
-                TxRecord::new("Building", "1000000").unwrap(),
+                TxRecord::new("Building", "1000000"),
                 (
+                    Ok(()),
                     "Building",
                     super::today(),
-                    (super::today() + Duration::days(1)),
+                    super::today(),
                     1,
                     vec![
                         ("nice", false),
@@ -517,7 +608,7 @@ mod tests {
                     ],
                     (super::today(), true),
                     super::parse_amount("1000000").unwrap(),
-                    (super::today(), 0.0 as f64),
+                    (None, 0.0 as f64),
                 ),
             ),
         ];
@@ -526,109 +617,36 @@ mod tests {
 
         for (i, t) in tests.iter().enumerate() {
             println!("test_getters#{}", i);
-            let (got, expected) = t;
-            assert_eq!(got.get_name(), expected.0);
-            assert_eq!(got.get_starts_on(), expected.1);
-            assert_eq!(got.get_ends_on(), expected.2);
-            assert_eq!(got.get_duration_days(), expected.3);
+            let (res, expected) = t;
+            let (result, name, starts_on, ends_on, duration, tags, status, per_diem, progress_test) =
+                expected;
+            // test for expected errors
+            assert_eq!(res.is_err(), result.is_err());
+            if res.is_err() {
+                continue;
+            }
+            // test the parser
+            let got = res.as_ref().unwrap();
+            // test getters
+            assert_eq!(got.get_name(), *name);
+            assert_eq!(got.get_starts_on(), *starts_on);
+            assert_eq!(got.get_ends_on(), *ends_on);
+            assert_eq!(got.get_duration_days(), *duration);
             // check the tags
-            expected
-                .4
-                .iter()
+            tags.iter()
                 .for_each(|(tag, exists)| assert_eq!(got.has_tag(tag), *exists));
             // is active
-            let (target_date, is_active) = expected.5;
-            assert_eq!(got.is_active_on(&target_date), is_active);
+            let (target_date, is_active) = status;
+            assert_eq!(got.is_active_on(&target_date), *is_active);
             // per diem
-            assert_eq!(got.per_diem(), expected.6);
+            assert_eq!(got.per_diem(), *per_diem);
             // progress
-            let (on_date, progress) = expected.7;
-            assert_eq!(got.get_progress(Some(&on_date)), progress);
-        }
-    }
-
-    #[test]
-    fn test_parse_transaction() {
-        let tests = vec![
-            (
-                "Shoes #clothing 229.95€ 3y",
-                TxRecord::from(
-                    "Shoes",
-                    vec!["clothing"],
-                    "229.95",
-                    super::today(),
-                    Lifetime::Year {
-                        amount: 3,
-                        times: 1,
-                    },
-                    super::now_local(),
-                    Some("Shoes #clothing 229.95€ 3y"),
-                )
-                .unwrap(),
-                (super::parse_amount("0.21").unwrap(), 0.0 as f64),
-            ),
-            (
-                "Rent 1729€ 1m12x 010118 #rent",
-                TxRecord::from(
-                    "Rent",
-                    vec!["rent"],
-                    "1729",
-                    super::date(1, 1, 2018),
-                    Lifetime::Month {
-                        amount: 1,
-                        times: 12,
-                    },
-                    super::now_local(),
-                    None,
-                )
-                .unwrap(),
-                (super::parse_amount("56.84").unwrap(), 100.0 as f64),
-            ),
-            (
-                "Tea 20€ 2m1x 010120 #food",
-                TxRecord::from(
-                    "Tea",
-                    vec!["food"],
-                    "20",
-                    super::date(1, 1, 2020),
-                    Lifetime::Month {
-                        amount: 2,
-                        times: 1,
-                    },
-                    super::now_local(),
-                    None,
-                )
-                .unwrap(),
-                (super::parse_amount("0.33").unwrap(), 100.0 as f64),
-            ),
-            (
-                "Tea 20€ 1m2x 010120 #food",
-                TxRecord::from(
-                    "Tea",
-                    vec!["food"],
-                    "20",
-                    super::date(1, 1, 2020),
-                    Lifetime::Month {
-                        amount: 1,
-                        times: 2,
-                    },
-                    super::now_local(),
-                    None,
-                )
-                .unwrap(),
-                (super::parse_amount("0.66").unwrap(), 100.0 as f64),
-            ),
-        ];
-
-        for (i, t) in tests.iter().enumerate() {
-            println!("test_parse_tx_record#{}", i);
-            assert_eq!(
-                t.0.parse::<TxRecord>().expect("test_parse_tx_record error"),
-                t.1
-            );
-            let (per_diem, progress) = &t.2;
-            assert_eq!(t.1.per_diem(), *per_diem);
-            assert_eq!(t.1.get_progress(None), *progress);
+            let (on_date, progress) = progress_test;
+            assert_eq!(got.get_progress(on_date), *progress);
+            // test serializing deserializing
+            let txs = got.to_string_record();
+            let txr = TxRecord::from_string_record(&txs).unwrap();
+            assert_eq!(*got, txr);
         }
     }
 

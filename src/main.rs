@@ -239,7 +239,7 @@ impl DataStore {
                     String::from(v.get_name()),
                     v.get_amount_total(),
                     v.per_diem(),
-                    v.get_progress(Some(d)),
+                    v.get_progress(&Some(*d)),
                 )
             })
             .collect::<Vec<(String, BigDecimal, BigDecimal, f64)>>();
