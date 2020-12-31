@@ -260,7 +260,7 @@ impl TxRecord {
         }
         if d >= end {
             // tx period has expired
-            return 100.0;
+            return 1.0;
         }
         // total number of days
         let n = (end - start).num_days() as f64;
