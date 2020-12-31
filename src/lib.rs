@@ -272,7 +272,7 @@ impl TxRecord {
 
     /// Returns the end date (always computed)
     pub fn get_ends_on(&self) -> NaiveDate {
-        self.starts_on + Duration::days(self.lifetime.get_days_since(&self.starts_on))
+        self.starts_on + Duration::days(self.lifetime.get_days_since(&self.starts_on) - 1)
     }
 
     pub fn is_active_on(&self, target: &NaiveDate) -> bool {
