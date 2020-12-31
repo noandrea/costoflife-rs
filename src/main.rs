@@ -307,3 +307,25 @@ fn pretty_print(tx: &TxRecord) {
     println!("From / To: {} / {}", tx.get_starts_on(), tx.get_ends_on());
     println!("Per Diem : {}", tx.per_diem());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::DataStore;
+    use ::costoflife::{self, TxRecord};
+
+    #[test]
+    fn test_datastore() {
+        let mut ds = DataStore::new();
+        // insert one entry
+        ds.insert(&TxRecord::new("Test#1", "10").unwrap());
+        ds.insert(&TxRecord::new("Test#2", "10").unwrap());
+        // simple insert
+        assert_eq!(
+            ds.cost_of_life(&costoflife::today()),
+            costoflife::parse_amount("20").unwrap()
+        );
+        // summary test
+        let summary = ds.summary(&costoflife::today());
+        assert_eq!(summary.len(), 2);
+    }
+}
