@@ -476,6 +476,22 @@ pub fn date_from_str(s: &str) -> Result<NaiveDate> {
 }
 
 #[cfg(test)]
+pub mod wasm_tests {
+    use wasm_bindgen_test::*;
+    wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    fn test_greetings() {
+        assert_eq!(super::costoflife_greetings(), 42.0);
+    }
+
+    #[wasm_bindgen_test]
+    fn test_per_diem() {
+        assert_eq!(super::costoflife_per_diem("20€ rent"), 20.0);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::{date, date_from_str, now_local, parse_amount, today, Lifetime, TxRecord};
     use chrono::Duration;

@@ -41,10 +41,14 @@ build-zip: build-dist
 	sha1sum $(APP)-$(GIT_DESCR).zip
 	@echo done
 
-test: test-all
-
-test-all:
+test: 
 	RUST_BACKTRACE=1 cargo tarpaulin -o Lcov
+
+test-wasm: 
+	wasm-pack test --firefox --headless
+	wasm-pack test --node
+
+test-all: test test-wasm
 
 lint: lint-all
 
