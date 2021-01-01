@@ -36,7 +36,7 @@ pub enum CostOfLifeError {
 
 impl fmt::Display for CostOfLifeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "error in costoflife")
+        write!(f, "{}", self)
     }
 }
 
@@ -477,11 +477,11 @@ pub fn date_from_str(s: &str) -> Result<NaiveDate> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Lifetime, TxRecord};
+    use super::{date, today, Lifetime, TxRecord};
     use chrono::Duration;
 
     #[test]
-    fn test_getters() {
+    fn test_tx() {
         let tests = vec![
             (
                 // create by parsing
@@ -651,119 +651,144 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_lifetime() {
+    fn test_lifetime() {
         let tests = vec![
             (
-                "1d1x",
+                ("1d1x", today(), 1),
                 Lifetime::Day {
                     amount: 1,
                     times: 1,
                 },
-                1,
             ),
             (
-                "10d1x",
+                ("10d1x", today(), 10),
                 Lifetime::Day {
                     amount: 10,
                     times: 1,
                 },
-                10,
             ),
             (
-                "10d10x",
+                ("10d10x", today(), 100),
                 Lifetime::Day {
                     amount: 10,
                     times: 10,
                 },
-                100,
             ),
             (
-                "1w1x",
+                ("1w1x", today(), 7),
                 Lifetime::Week {
                     amount: 1,
                     times: 1,
                 },
-                7,
             ),
             (
-                "7w",
+                ("7w", today(), 49),
                 Lifetime::Week {
                     amount: 7,
                     times: 1,
                 },
-                49,
             ),
             (
-                "10w10x",
+                ("10w10x", today(), 700),
                 Lifetime::Week {
                     amount: 10,
                     times: 10,
                 },
-                700,
             ),
             (
-                "20y",
+                ("20y", date(1, 1, 2020), 7305),
                 Lifetime::Year {
                     amount: 20,
                     times: 1,
                 },
-                7305,
             ),
             (
-                "1y20x",
+                ("1y20x", date(1, 1, 2020), 7305),
                 Lifetime::Year {
                     amount: 1,
                     times: 20,
                 },
-                7305,
             ),
             (
-                "1y",
+                ("20y", date(1, 1, 2021), 7305),
+                Lifetime::Year {
+                    amount: 20,
+                    times: 1,
+                },
+            ),
+            (
+                ("1y", date(1, 1, 2020), 366),
                 Lifetime::Year {
                     amount: 1,
                     times: 1,
                 },
-                366,
             ),
             (
-                "1m",
+                ("1y", date(1, 1, 2021), 365),
+                Lifetime::Year {
+                    amount: 1,
+                    times: 1,
+                },
+            ),
+            (
+                ("1m", date(1, 1, 2021), 31),
                 Lifetime::Month {
                     amount: 1,
                     times: 1,
                 },
-                31,
             ),
             (
-                "12m",
+                ("12m", date(1, 1, 2021), 365),
                 Lifetime::Month {
                     amount: 12,
                     times: 1,
                 },
-                366,
             ),
             (
-                "1m12x",
+                ("1m12x", date(1, 1, 2021), 365),
                 Lifetime::Month {
                     amount: 1,
                     times: 12,
                 },
-                366,
+            ),
+            (
+                ("", today(), 1),
+                Lifetime::Day {
+                    amount: 1,
+                    times: 1,
+                },
             ),
         ];
 
         for (i, t) in tests.iter().enumerate() {
             println!("test_parse_lifetime#{}", i);
 
-            let (lifetime_str, lifetime_exp, days) = t;
+            let (lifetime_spec, lifetime_exp) = t;
+            let (input_str, start_date, duration_days) = lifetime_spec;
 
             assert_eq!(
-                lifetime_str
+                input_str
                     .parse::<Lifetime>()
                     .expect("test_parse_lifetime error"),
                 *lifetime_exp,
             );
             // this make sense only with the assertion above
-            assert_eq!(lifetime_exp.get_days_since(&super::date(1, 1, 2020)), *days)
+            assert_eq!(lifetime_exp.get_days_since(start_date), *duration_days);
         }
+    }
+
+    #[test]
+    fn test_parsers() {
+        // parse date
+        let r = super::date_from_str("27/12/2020");
+        assert_eq!(r.unwrap(), super::date(27, 12, 2020));
+        // invalid date
+        let r = super::date_from_str("30/02/2020");
+        assert_eq!(r.is_err(), true);
+        // invalid format
+        let r = super::date_from_str("30/02/20");
+        assert_eq!(r.is_err(), true)
+
+        // parse amount
     }
 }

@@ -100,7 +100,7 @@ git-release:
 	git-chglog --output CHANGELOG.md
 	git tag $(GIT_DESCR) --delete
 	git add CHANGELOG.md && git commit -m "$(GIT_DESCR)" -m "Changelog: https://github.com/noandrea/$(APP)/blob/master/CHANGELOG.md"
-	git tag -a "$(GIT_DESCR)" -m "Changelog: https://github.com/noandrea/$(APP)/blob/master/CHANGELOG.md"
+	git tag -s -a "$(GIT_DESCR)" -m "Changelog: https://github.com/noandrea/$(APP)/blob/master/CHANGELOG.md"
 	@echo release complete
 
 
