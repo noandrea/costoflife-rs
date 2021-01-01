@@ -2,6 +2,23 @@
 ## [Unreleased]
 
 
+<a name="0.2.2"></a>
+## [0.2.2] - 2020-12-31
+### Chore
+- **lib:** improve error management and test coverage
+
+### Feat
+- **lib:** tx tags are returned in alphabetical order
+
+### Fix
+- **lib:** end_date should be the last inclusive date
+- **lib:** magic number for 100% should be 1.0
+- **lib:** date calculation off of one day
+
+### Test
+- **cli:** add tests for datastore
+
+
 <a name="0.2.1"></a>
 ## [0.2.1] - 2020-12-28
 ### Fix
@@ -50,7 +67,8 @@
 <a name="0.1.0"></a>
 ## 0.1.0 - 2020-11-30
 
-[Unreleased]: https://github.com/noandrea/costoflife-rs/compare/0.2.1...HEAD
+[Unreleased]: https://github.com/noandrea/costoflife-rs/compare/0.2.2...HEAD
+[0.2.2]: https://github.com/noandrea/costoflife-rs/compare/0.2.1...0.2.2
 [0.2.1]: https://github.com/noandrea/costoflife-rs/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/noandrea/costoflife-rs/compare/0.1.2...0.2.0
 [0.1.2]: https://github.com/noandrea/costoflife-rs/compare/0.1.1...0.1.2
