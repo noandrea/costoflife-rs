@@ -436,7 +436,7 @@ impl FromStr for TxRecord {
 
 impl fmt::Display for TxRecord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({})", self.name)
+        write!(f, "{}", self.name)
     }
 }
 
@@ -477,7 +477,7 @@ pub fn date_from_str(s: &str) -> Result<NaiveDate> {
 
 #[cfg(test)]
 mod tests {
-    use super::{date, today, Lifetime, TxRecord};
+    use super::{date, date_from_str, now_local, parse_amount, today, Lifetime, TxRecord};
     use chrono::Duration;
 
     #[test]
@@ -489,13 +489,13 @@ mod tests {
                 (
                     Ok(()),                                                 // ok/error
                     "Something we bought",                                  // title
-                    super::today(),                                         // starts_on
-                    (super::today() + Duration::days(99)),                  // ends_on
+                    today(),                                                // starts_on
+                    (today() + Duration::days(99)),                         // ends_on
                     100,                                                    // duration days
                     vec![("nice", true), ("living", true), ("car", false)], // tags
-                    (super::today(), true),                                 // is active
-                    super::parse_amount("10").unwrap(),                     // per diem
-                    (Some(super::today()), 0.0 as f64), // progress                                                 // PARSE ERROR
+                    (today(), true),                                        // is active
+                    parse_amount("10").unwrap(),                            // per diem
+                    (Some(today()), 0.0 as f64), // progress                                                 // PARSE ERROR
                 ),
             ),
             (
@@ -504,13 +504,13 @@ mod tests {
                 (
                     Ok(()),                                                 // ok/error
                     "Something we bought",                                  // title
-                    super::today(),                                         // starts_on
-                    (super::today() + Duration::days(99)),                  // ends_on
+                    today(),                                                // starts_on
+                    (today() + Duration::days(99)),                         // ends_on
                     100,                                                    // duration days
                     vec![("nice", true), ("living", true), ("car", false)], // tags
-                    (super::today(), true),                                 // is active
-                    super::parse_amount("10").unwrap(),                     // per diem
-                    (Some(super::today()), 0.0 as f64), // progress                                                 // PARSE ERROR
+                    (today(), true),                                        // is active
+                    parse_amount("10").unwrap(),                            // per diem
+                    (Some(today()), 0.0 as f64), // progress                                                 // PARSE ERROR
                 ),
             ),
             (
@@ -519,13 +519,13 @@ mod tests {
                 (
                     Err(()),                                                // ok/error
                     "Something we bought",                                  // title
-                    super::today(),                                         // starts_on
-                    (super::today() + Duration::days(99)),                  // ends_on
+                    today(),                                                // starts_on
+                    (today() + Duration::days(99)),                         // ends_on
                     100,                                                    // duration days
                     vec![("nice", true), ("living", true), ("car", false)], // tags
-                    (super::today(), true),                                 // is active
-                    super::parse_amount("10").unwrap(),                     // per diem
-                    (Some(super::today()), 0.0 as f64),                     // progress
+                    (today(), true),                                        // is active
+                    parse_amount("10").unwrap(),                            // per diem
+                    (Some(today()), 0.0 as f64),                            // progress
                 ),
             ),
             (
@@ -534,12 +534,12 @@ mod tests {
                 (
                     Ok(()),                                // ok/error
                     "Rent",                                // title
-                    super::date(1, 1, 2018),               // starts_on
-                    (super::date(31, 12, 2018)),           // ends_on
+                    date(1, 1, 2018),                      // starts_on
+                    (date(31, 12, 2018)),                  // ends_on
                     365,                                   // duration days
                     vec![("home", false), ("rent", true)], // tags
-                    (super::today(), false),               // is active
-                    super::parse_amount("56.84").unwrap(), // per diem
+                    (today(), false),                      // is active
+                    parse_amount("56.84").unwrap(),        // per diem
                     (None, 1.0 as f64),                    // progress
                 ),
             ),
@@ -549,13 +549,28 @@ mod tests {
                 (
                     Err(()),                               // ok/error
                     "Rent",                                // title
-                    super::date(1, 1, 18),                 // starts_on
-                    (super::date(31, 12, 18)),             // ends_on
+                    date(1, 1, 2018),                      // starts_on
+                    (date(31, 12, 2018)),                  // ends_on
                     365,                                   // duration days
                     vec![("home", false), ("rent", true)], // tags
-                    (super::today(), false),               // is active
-                    super::parse_amount("58.84").unwrap(), // per diem
+                    (today(), false),                      // is active
+                    parse_amount("58.84").unwrap(),        // per diem
                     (None, 1.0 as f64),                    // progress
+                ),
+            ),
+            (
+                // from string with week repeats (39,96)
+                TxRecord::from_str("Mobile internet 9.99€ 210421 1w4x #internet"),
+                (
+                    Ok(()),                                              // ok/error
+                    "Mobile internet",                                   // title
+                    date(21, 4, 2021),                                   // starts_on
+                    (date(18, 5, 2021)),                                 // ends_on
+                    28,                                                  // duration days
+                    vec![("internet", true)],                            // tags
+                    (date(12, 5, 2021), true),                           // is active
+                    parse_amount("1.42").unwrap(),                       // per diem
+                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f64), // progress
                 ),
             ),
             (
@@ -564,19 +579,19 @@ mod tests {
                     "Car",
                     vec!["transportation", "lifestyle"],
                     "100000",
-                    super::date(01, 01, 2010),
+                    date(01, 01, 2010),
                     Lifetime::Year {
                         amount: 20,
                         times: 1,
                     },
-                    super::now_local(),
+                    now_local(),
                     None,
                 ),
                 (
                     Ok(()),
                     "Car",
-                    super::date(01, 01, 2010),
-                    (super::date(31, 12, 2029)),
+                    date(01, 01, 2010),
+                    (date(31, 12, 2029)),
                     7305,
                     vec![
                         ("nice", false),
@@ -585,9 +600,9 @@ mod tests {
                         ("transportation", true),
                         ("lifestyle", true),
                     ],
-                    (super::date(01, 01, 2030), false),
-                    super::parse_amount("13.68").unwrap(),
-                    (Some(super::date(01, 10, 2020)), 0.537513691128149 as f64),
+                    (date(01, 01, 2030), false),
+                    parse_amount("13.68").unwrap(),
+                    (Some(date(01, 10, 2020)), 0.537513691128149 as f64),
                 ),
             ),
             (
@@ -596,8 +611,8 @@ mod tests {
                 (
                     Ok(()),
                     "Building",
-                    super::today(),
-                    super::today(),
+                    today(),
+                    today(),
                     1,
                     vec![
                         ("nice", false),
@@ -606,8 +621,8 @@ mod tests {
                         ("transportation", false),
                         ("lifestyle", false),
                     ],
-                    (super::today(), true),
-                    super::parse_amount("1000000").unwrap(),
+                    (today(), true),
+                    parse_amount("1000000").unwrap(),
                     (None, 0.0 as f64),
                 ),
             ),
@@ -629,6 +644,7 @@ mod tests {
             let got = res.as_ref().unwrap();
             // test getters
             assert_eq!(got.get_name(), *name);
+            assert_eq!(got.get_name(), got.to_string());
             assert_eq!(got.get_starts_on(), *starts_on);
             assert_eq!(got.get_ends_on(), *ends_on);
             assert_eq!(got.get_duration_days(), *duration);
@@ -780,13 +796,13 @@ mod tests {
     #[test]
     fn test_parsers() {
         // parse date
-        let r = super::date_from_str("27/12/2020");
-        assert_eq!(r.unwrap(), super::date(27, 12, 2020));
+        let r = date_from_str("27/12/2020");
+        assert_eq!(r.unwrap(), date(27, 12, 2020));
         // invalid date
-        let r = super::date_from_str("30/02/2020");
+        let r = date_from_str("30/02/2020");
         assert_eq!(r.is_err(), true);
         // invalid format
-        let r = super::date_from_str("30/02/20");
+        let r = date_from_str("30/02/20");
         assert_eq!(r.is_err(), true)
 
         // parse amount
