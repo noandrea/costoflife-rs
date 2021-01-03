@@ -1,6 +1,21 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
+
+<a name="0.2.4"></a>
+## [0.2.4] - 2021-01-03
+### Chore
+- **cli:** minor tweaks to the cli interface
+
+### Doc
+- better documentation
+
+### Fix
+- regexp for tags
+
+
+<a name="0.2.3"></a>
+## [0.2.3] - 2021-01-02
 ### Doc
 - update readme
 
@@ -10,14 +25,8 @@
 
 <a name="0.2.2"></a>
 ## [0.2.2] - 2021-01-02
-
-<a name="0.2.3"></a>
-## [0.2.3] - 2021-01-02
 ### Chore
 - **lib:** improve error management and test coverage
-
-### Doc
-- update readme
 
 ### Feat
 - **lib:** tx tags are returned in alphabetical order
@@ -29,9 +38,6 @@
 
 ### Test
 - **cli:** add tests for datastore
-
-### Tests
-- add wasm tests
 
 
 <a name="0.2.1"></a>
@@ -82,9 +88,10 @@
 <a name="0.1.0"></a>
 ## 0.1.0 - 2020-11-30
 
-[Unreleased]: https://github.com/noandrea/costoflife-rs/compare/0.2.2...HEAD
-[0.2.2]: https://github.com/noandrea/costoflife-rs/compare/0.2.3...0.2.2
-[0.2.3]: https://github.com/noandrea/costoflife-rs/compare/0.2.1...0.2.3
+[Unreleased]: https://github.com/noandrea/costoflife-rs/compare/0.2.4...HEAD
+[0.2.4]: https://github.com/noandrea/costoflife-rs/compare/0.2.3...0.2.4
+[0.2.3]: https://github.com/noandrea/costoflife-rs/compare/0.2.2...0.2.3
+[0.2.2]: https://github.com/noandrea/costoflife-rs/compare/0.2.1...0.2.2
 [0.2.1]: https://github.com/noandrea/costoflife-rs/compare/0.2.0...0.2.1
 [0.2.0]: https://github.com/noandrea/costoflife-rs/compare/0.1.2...0.2.0
 [0.1.2]: https://github.com/noandrea/costoflife-rs/compare/0.1.1...0.1.2
