@@ -13,6 +13,7 @@ use std::io::{self, BufRead, LineWriter, Write};
 use std::path::Path;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const DB_FILENAME: &str = "costoflife.data.txt";
 
 fn main() -> Result<(), Box<dyn error::Error>> {
     //println!("Welcome to CostOf.Life!");
@@ -21,6 +22,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         .version(VERSION)
         .author("Andrea G. <no.andrea@gmail.com>")
         .about("keep track of the cost of your daily life")
+        .after_help("visit https://thecostof.life for more info")
         .arg(
             Arg::new("config")
                 .short('c')
@@ -37,27 +39,9 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 .about("use this date to calculate the cost of life")
                 .takes_value(true),
         )
-        .arg(
-            Arg::new("quiet")
-                .short('q')
-                .long("quiet")
-                .about("suppress verbose logging"),
-        )
-        .arg(
-            Arg::new("v")
-                .short('v')
-                .multiple(true)
-                .about("Sets the level of verbosity"),
-        )
-        .arg(
-            Arg::new("debug")
-                .short('d')
-                .about("print debug information verbosely"),
-        )
         .subcommand(
-            App::new("new")
+            App::new("add")
                 .about("add new expense")
-                .version("1.3")
                 .author("<prez@adgb.me>")
                 .arg(
                     Arg::new("EXP_STR")
@@ -65,22 +49,25 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                         .required(true)
                         .multiple(true)
                         .value_terminator("."),
+                )
+                .arg(
+                    Arg::new("non_interactive")
+                        .long("yes")
+                        .short('y')
+                        .takes_value(false)
+                        .about("automatically reply yes"),
                 ),
         )
         .subcommand(
             App::new("summary")
                 .about("print th expenses summary")
-                .version("1.3")
-                .author("<prez@adgb.me>"),
+                .author("<write@adgb.me>"),
         )
         .get_matches();
 
     // first, see if there is the config dir
     let path = match ProjectDirs::from("com", "FarcastTo", "CostOf.Life") {
         Some(p) => {
-            // println!("config dir is {:?}", p.config_dir());
-            // println!("data   dir is {:?}", p.data_dir());
-
             if !p.data_dir().exists() {
                 let authorized = Confirm::with_theme(&ColorfulTheme::default())
                     .with_prompt("The CostOf.Life data dir does not exists, can I create it?")
@@ -99,7 +86,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                     }
                 }
             }
-            p.data_dir().join(Path::new("cost.of.life.data.txt"))
+            p.data_dir().join(Path::new(DB_FILENAME))
         }
         None => panic!("cannot retrieve the config file dir"),
     };
@@ -113,14 +100,22 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     };
     // command line
     match matches.subcommand() {
-        Some(("new", c)) => {
+        Some(("add", c)) => {
             if let Some(values) = c.values_of("EXP_STR") {
                 let v = values.collect::<Vec<&str>>().join(" ");
                 let tx = costoflife::TxRecord::from_str(&v).expect("Cannot parse the input string");
+                // check the values for
+                if c.is_present("non_interactive") {
+                    ds.insert(&tx);
+                    ds.save(path.as_path())?;
+                    println!("done!");
+                    return Ok(());
+                }
+
                 pretty_print(&tx);
                 // save to the store
                 match Confirm::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Do you want to save it?")
+                    .with_prompt("Do you want to add it?")
                     .default(true)
                     .interact()
                 {
@@ -285,26 +280,13 @@ impl DataStore {
 
 /// Pretty print to stdout a transaction
 fn pretty_print(tx: &TxRecord) {
-    println!(
-        "Name     : {} #[{}]",
-        tx.get_name(),
-        tx.get_tags()
-            .iter()
-            .map(String::from)
-            .collect::<Vec<String>>()
-            .join(",")
-    );
-    match tx.amount_is_total() {
-        true => println!("Amount   : {}", tx.get_amount()),
-        _ => {
-            println!(
-                "Amount   : {} (Total: {})",
-                tx.get_amount(),
-                tx.get_amount_total()
-            )
-        }
+    println!("Name     : {}", tx.get_name());
+    println!("Tags     : {}", tx.get_tag_list().join(", "));
+    print!("Amount   : {}", tx.get_amount());
+    if !tx.amount_is_total() {
+        print!("(Total: {}€)", tx.get_amount_total());
     }
-    println!("From / To: {} / {}", tx.get_starts_on(), tx.get_ends_on());
+    println!("\nFrom - To: {} - {}", tx.get_starts_on(), tx.get_ends_on());
     println!("Per Diem : {}", tx.per_diem());
 }
 

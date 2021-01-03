@@ -211,6 +211,10 @@ impl TxRecord {
     pub fn get_tags(&self) -> BTreeSet<String> {
         self.tags.values().map(String::from).collect()
     }
+    /// Get the tags as a vector
+    pub fn get_tag_list(&self) -> Vec<String> {
+        self.tags.values().map(String::from).collect()
+    }
     /// Get the amount for the tx, rounded to 2 decimals
     pub fn get_amount(&self) -> BigDecimal {
         self.amount.with_scale(2)
@@ -235,7 +239,7 @@ impl TxRecord {
     ///
     /// That is, when there is no repetition on the lifetime
     pub fn amount_is_total(&self) -> bool {
-        self.get_amount_total() == self.amount
+        self.lifetime.get_repeats() > 1
     }
     /// Tells if the TxRecord as a tag
     pub fn has_tag(&self, tag: &str) -> bool {
@@ -664,6 +668,7 @@ mod tests {
             assert_eq!(got.get_starts_on(), *starts_on);
             assert_eq!(got.get_ends_on(), *ends_on);
             assert_eq!(got.get_duration_days(), *duration);
+            assert_eq!(got.get_tag_list().len(), got.get_tags().len());
             // check the tags
             tags.iter()
                 .for_each(|(tag, exists)| assert_eq!(got.has_tag(tag), *exists));

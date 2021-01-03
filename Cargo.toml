@@ -24,7 +24,7 @@ opt-level = 's'
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-chrono = { version= "0.4.19", features = ["wasmbind"] }
+chrono = { version = "0.4.19", features = ["wasmbind"] }
 bigdecimal = "0.2.0"
 num-bigint = "0.3.1"
 slug = "0.1.4"
