@@ -85,6 +85,11 @@ wasm-build:
 wasm-publish: wasm-build
 	wasm-pack publish
 
+publish:
+	cargo publish
+
+publish-all: publish wasm-publish
+
 k8s-deploy:
 	@echo deploy k8s
 	kubectl -n $(K8S_NAMESPACE) set image deployment/$(K8S_DEPLOYMENT) $(DOCKER_IMAGE)=$(DOCKER_REGISTRY)/$(DOCKER_IMAGE):$(DOCKER_TAG)
