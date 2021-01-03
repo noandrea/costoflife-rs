@@ -691,105 +691,105 @@ mod tests {
     fn test_lifetime() {
         let tests = vec![
             (
-                ("1d1x", today(), 1),
+                ("1d1x", today(), 1, "1d1x"),
                 Lifetime::Day {
                     amount: 1,
                     times: 1,
                 },
             ),
             (
-                ("10d1x", today(), 10),
+                ("10d1x", today(), 10, "10d1x"),
                 Lifetime::Day {
                     amount: 10,
                     times: 1,
                 },
             ),
             (
-                ("10d10x", today(), 100),
+                ("10d10x", today(), 100, "10d10x"),
                 Lifetime::Day {
                     amount: 10,
                     times: 10,
                 },
             ),
             (
-                ("1w1x", today(), 7),
+                ("1w", today(), 7, "1w1x"),
                 Lifetime::Week {
                     amount: 1,
                     times: 1,
                 },
             ),
             (
-                ("7w", today(), 49),
+                ("7w", today(), 49, "7w1x"),
                 Lifetime::Week {
                     amount: 7,
                     times: 1,
                 },
             ),
             (
-                ("10w10x", today(), 700),
+                ("10w10x", today(), 700, "10w10x"),
                 Lifetime::Week {
                     amount: 10,
                     times: 10,
                 },
             ),
             (
-                ("20y", date(1, 1, 2020), 7305),
+                ("20y", date(1, 1, 2020), 7305, "20y1x"),
                 Lifetime::Year {
                     amount: 20,
                     times: 1,
                 },
             ),
             (
-                ("1y20x", date(1, 1, 2020), 7305),
+                ("1y20x", date(1, 1, 2020), 7305, "1y20x"),
                 Lifetime::Year {
                     amount: 1,
                     times: 20,
                 },
             ),
             (
-                ("20y", date(1, 1, 2021), 7305),
+                ("20y", date(1, 1, 2021), 7305, "20y1x"),
                 Lifetime::Year {
                     amount: 20,
                     times: 1,
                 },
             ),
             (
-                ("1y", date(1, 1, 2020), 366),
+                ("1y", date(1, 1, 2020), 366, "1y1x"),
                 Lifetime::Year {
                     amount: 1,
                     times: 1,
                 },
             ),
             (
-                ("1y", date(1, 1, 2021), 365),
+                ("1y", date(1, 1, 2021), 365, "1y1x"),
                 Lifetime::Year {
                     amount: 1,
                     times: 1,
                 },
             ),
             (
-                ("1m", date(1, 1, 2021), 31),
+                ("1m", date(1, 1, 2021), 31, "1m1x"),
                 Lifetime::Month {
                     amount: 1,
                     times: 1,
                 },
             ),
             (
-                ("12m", date(1, 1, 2021), 365),
+                ("12m", date(1, 1, 2021), 365, "12m1x"),
                 Lifetime::Month {
                     amount: 12,
                     times: 1,
                 },
             ),
             (
-                ("1m12x", date(1, 1, 2021), 365),
+                ("1m12x", date(1, 1, 2021), 365, "1m12x"),
                 Lifetime::Month {
                     amount: 1,
                     times: 12,
                 },
             ),
             (
-                ("", today(), 1),
+                ("", today(), 1, "1d1x"),
                 Lifetime::Day {
                     amount: 1,
                     times: 1,
@@ -801,7 +801,7 @@ mod tests {
             println!("test_parse_lifetime#{}", i);
 
             let (lifetime_spec, lifetime_exp) = t;
-            let (input_str, start_date, duration_days) = lifetime_spec;
+            let (input_str, start_date, duration_days, to_str) = lifetime_spec;
 
             assert_eq!(
                 input_str
@@ -811,6 +811,8 @@ mod tests {
             );
             // this make sense only with the assertion above
             assert_eq!(lifetime_exp.get_days_since(start_date), *duration_days);
+            // to string
+            assert_eq!(lifetime_exp.to_string(), *to_str);
         }
     }
 
