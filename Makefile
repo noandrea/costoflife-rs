@@ -82,7 +82,7 @@ docker-run:
 wasm-build:
 	wasm-pack build --release
 
-wasm-publish:
+wasm-publish: wasm-build
 	wasm-pack publish
 
 k8s-deploy:

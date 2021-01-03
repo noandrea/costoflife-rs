@@ -57,7 +57,7 @@ impl Error for CostOfLifeError {}
 // initialize regexp
 lazy_static! {
     static ref RE_CURRENCY: Regex = Regex::new(r"(\d+(\.\d{2})?)\p{Currency_Symbol}").unwrap();
-    static ref RE_HASHTAG: Regex = Regex::new(r"[#\.]([a-zA-Z][0-9a-zA-Z_]*)").unwrap();
+    static ref RE_HASHTAG: Regex = Regex::new(r"^[#\.]([a-zA-Z][0-9a-zA-Z_]*)$").unwrap();
     static ref RE_LIFETIME: Regex =
         Regex::new(r"(([1-9]{1}[0-9]*)([dwmy]))(([1-9]{1}[0-9]*)x)?").unwrap();
     static ref RE_DATE: Regex = Regex::new(r"([0-3][0-9][0-1][0-9][1-9][0-9])").unwrap();
@@ -561,17 +561,17 @@ mod tests {
             ),
             (
                 // from string with WRONG date
-                TxRecord::from_str("Rent 1729€ 1m12x 320118 #rent"),
+                TxRecord::from_str("Rent#2018 1729€ 1m12x 320118 #rent"),
                 (
-                    Err(()),                               // ok/error
-                    "Rent",                                // title
-                    date(1, 1, 2018),                      // starts_on
-                    (date(31, 12, 2018)),                  // ends_on
-                    365,                                   // duration days
-                    vec![("home", false), ("rent", true)], // tags
-                    (today(), false),                      // is active
-                    parse_amount("58.84").unwrap(),        // per diem
-                    (None, 1.0 as f64),                    // progress
+                    Err(()),                                                 // ok/error
+                    "Rent#2018",                                             // title
+                    date(1, 1, 2018),                                        // starts_on
+                    (date(31, 12, 2018)),                                    // ends_on
+                    365,                                                     // duration days
+                    vec![("home", false), ("rent", true), ("#2018", false)], // tags
+                    (today(), false),                                        // is active
+                    parse_amount("58.84").unwrap(),                          // per diem
+                    (None, 1.0 as f64),                                      // progress
                 ),
             ),
             (
