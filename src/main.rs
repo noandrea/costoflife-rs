@@ -111,8 +111,15 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                     println!("done!");
                     return Ok(());
                 }
-
-                pretty_print(&tx);
+                // print the transaction
+                println!("Name     : {}", tx.get_name());
+                println!("Tags     : {}", tx.get_tags().join(", "));
+                print!("Amount   : {}", tx.get_amount());
+                if !tx.amount_is_total() {
+                    print!("(Total: {}€)", tx.get_amount_total());
+                }
+                println!("\nFrom - To: {} - {}", tx.get_starts_on(), tx.get_ends_on());
+                println!("Per Diem : {}", tx.per_diem());
                 // save to the store
                 match Confirm::with_theme(&ColorfulTheme::default())
                     .with_prompt("Do you want to add it?")
@@ -249,6 +256,21 @@ impl DataStore {
         self.data.insert(Self::hash(tx), tx.clone())
     }
 
+    /// Get the size of the datastore
+    ///
+    /// # Arguments
+    ///
+    /// * `on` - A Option<chrono:NaiveDate> to filter for active transactions
+    ///
+    /// if the Option is None then the full size is returned
+    ///
+    pub fn size(&self, on: Option<NaiveDate>) -> usize {
+        match on {
+            Some(date) => self.summary(&date).len(),
+            None => self.data.len(),
+        }
+    }
+
     // The output is wrapped in a Result to allow matching on errors
     // Returns an Iterator to the Reader of the lines of the file.
     fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
@@ -278,21 +300,9 @@ impl DataStore {
     }
 }
 
-/// Pretty print to stdout a transaction
-fn pretty_print(tx: &TxRecord) {
-    println!("Name     : {}", tx.get_name());
-    println!("Tags     : {}", tx.get_tags().join(", "));
-    print!("Amount   : {}", tx.get_amount());
-    if !tx.amount_is_total() {
-        print!("(Total: {}€)", tx.get_amount_total());
-    }
-    println!("\nFrom - To: {} - {}", tx.get_starts_on(), tx.get_ends_on());
-    println!("Per Diem : {}", tx.per_diem());
-}
-
 #[cfg(test)]
 mod tests {
-    use super::DataStore;
+    use super::*;
     use ::costoflife::{self, TxRecord};
 
     #[test]
@@ -309,5 +319,14 @@ mod tests {
         // summary test
         let summary = ds.summary(&costoflife::today());
         assert_eq!(summary.len(), 2);
+
+        // test load
+        let mut ds = DataStore::new();
+        // db path
+        let p = Path::new("./testdata/costoflife.data.txt");
+        // load
+        let r = ds.load(p);
+        assert_eq!(r.is_err(), false);
+        assert_eq!(ds.size(None), 5 as usize);
     }
 }

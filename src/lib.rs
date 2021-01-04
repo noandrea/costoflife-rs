@@ -544,7 +544,7 @@ pub mod wasm_tests {
 
 #[cfg(test)]
 mod tests {
-    use super::{date, date_from_str, now_local, parse_amount, today, Lifetime, TxRecord};
+    use super::*;
     use chrono::Duration;
 
     #[test]
@@ -885,7 +885,6 @@ mod tests {
 
     #[test]
     fn test_parsers() {
-        use super::extract_date;
         // parse date
         let r = date_from_str("27/12/2020");
         assert_eq!(r.unwrap(), date(27, 12, 2020));
