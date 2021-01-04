@@ -281,7 +281,7 @@ impl DataStore {
 /// Pretty print to stdout a transaction
 fn pretty_print(tx: &TxRecord) {
     println!("Name     : {}", tx.get_name());
-    println!("Tags     : {}", tx.get_tag_list().join(", "));
+    println!("Tags     : {}", tx.get_tags().join(", "));
     print!("Amount   : {}", tx.get_amount());
     if !tx.amount_is_total() {
         print!("(Total: {}€)", tx.get_amount_total());

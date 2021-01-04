@@ -57,7 +57,7 @@ impl Error for CostOfLifeError {}
 // initialize regexp
 lazy_static! {
     static ref RE_CURRENCY: Regex = Regex::new(r"(\d+(\.\d{2})?)\p{Currency_Symbol}").unwrap();
-    static ref RE_HASHTAG: Regex = Regex::new(r"^[#\.]([a-zA-Z][0-9a-zA-Z_]*)$").unwrap();
+    static ref RE_HASHTAG: Regex = Regex::new(r"^[#\.]([a-zA-Z][0-9a-zA-Z_-]*)$").unwrap();
     static ref RE_LIFETIME: Regex =
         Regex::new(r"(([1-9]{1}[0-9]*)([dwmy]))(([1-9]{1}[0-9]*)x)?").unwrap();
     static ref RE_DATE: Regex = Regex::new(r"([0-3][0-9][0-1][0-9][1-9][0-9])").unwrap();
@@ -75,10 +75,14 @@ fn extract_hashtag(text: &str) -> Option<&str> {
         .and_then(|c| c.get(1).map(|m| m.as_str()))
 }
 
-fn extract_date(text: &str) -> Option<&str> {
-    RE_DATE
+fn extract_date(text: &str) -> Result<NaiveDate> {
+    let ds = RE_DATE
         .captures(text)
-        .and_then(|c| c.get(1).map(|m| m.as_str()))
+        .and_then(|c| c.get(1).map(|m| m.as_str()));
+    match ds {
+        Some(d) => date_from_str(d),
+        None => Ok(today()),
+    }
 }
 
 fn extract_lifetime(text: &str) -> (&str, i64, i64) {
@@ -161,14 +165,10 @@ impl FromStr for Lifetime {
     fn from_str(s: &str) -> Result<Lifetime> {
         let (period, amount, times) = extract_lifetime(s);
         match period {
-            "d" => Ok(Lifetime::Day { amount, times }),
             "w" => Ok(Lifetime::Week { amount, times }),
             "y" => Ok(Lifetime::Year { amount, times }),
             "m" => Ok(Lifetime::Month { amount, times }),
-            _ => Err(CostOfLifeError::InvalidLifetimeFormat(format!(
-                "invalid format {}",
-                s
-            ))),
+            _ => Ok(Lifetime::Day { amount, times }),
         }
     }
 }
@@ -208,12 +208,13 @@ impl TxRecord {
         &self.name[..]
     }
     /// Get the tags for the tx, sorted alphabetically
-    pub fn get_tags(&self) -> BTreeSet<String> {
-        self.tags.values().map(String::from).collect()
-    }
-    /// Get the tags as a vector
-    pub fn get_tag_list(&self) -> Vec<String> {
-        self.tags.values().map(String::from).collect()
+    pub fn get_tags(&self) -> Vec<String> {
+        self.tags
+            .values()
+            .map(String::from)
+            .collect::<BTreeSet<String>>()
+            .into_iter()
+            .collect()
     }
     /// Get the amount for the tx, rounded to 2 decimals
     pub fn get_amount(&self) -> BigDecimal {
@@ -352,6 +353,37 @@ impl TxRecord {
         )
     }
 
+    /// Builds a TxRecord using parameters
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - A string slice that holds the name of the transaction
+    /// * `tags` - A vector of string slices with the transaction's tags
+    /// * `amount` - A string slice representing a monetary value
+    /// * `starts_on` - The date of the start of the transaction
+    /// * `lifetime` - The lifetime of transaction
+    /// * `recorded_at` - The localized exact time when the tx was added
+    /// * `src` - An option string slice with the original string used to submit the tx
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use costoflife::{self, TxRecord, Lifetime};
+    ///
+    /// let tx = TxRecord::from(
+    ///     "Car",
+    ///     vec!["transportation", "lifestyle"],
+    ///     "100000",
+    ///     costoflife::date(01, 01, 2010),
+    ///     Lifetime::Year {
+    ///         amount: 20,
+    ///         times: 1,
+    ///     },
+    ///     costoflife::now_local(),
+    ///     None,
+    /// ).unwrap();
+    ///
+    /// ```
     pub fn from(
         name: &str,
         tags: Vec<&str>,
@@ -409,10 +441,8 @@ impl TxRecord {
                 // add duration
                 lifetime = t.parse::<Lifetime>()?;
             } else if RE_DATE.is_match(t) {
-                starts_on = match extract_date(t) {
-                    Some(d) => NaiveDate::parse_from_str(d, "%d%m%y")?,
-                    None => today(),
-                }
+                // start date
+                starts_on = extract_date(t)?;
             } else {
                 // catch all for the name
                 name.push(&t)
@@ -473,10 +503,27 @@ pub fn date(d: u32, m: u32, y: i32) -> NaiveDate {
     NaiveDate::from_ymd(y, m, d)
 }
 
-/// Parse a date from string, the string should be formatted
-/// as dd/mm/yyyy
+/// Parse a date from string, it recognizes the formats
+///
+/// - dd/mm/yyyy
+/// - dd.mm.yyyy
+/// - ddmmyy
+/// - dd.mm.yy
+/// - dd/mm/yy
+///
 pub fn date_from_str(s: &str) -> Result<NaiveDate> {
-    Ok(NaiveDate::parse_from_str(s, "%d/%m/%Y")?)
+    let formats = vec!["%d%m%y", "%d.%m.%y", "%d/%m/%y", "%d/%m/%Y", "%d.%m.%Y"];
+    // check all the formats
+    for f in formats {
+        let r = NaiveDate::parse_from_str(s, f);
+        if !r.is_err() {
+            return Ok(r.unwrap());
+        }
+    }
+    Err(CostOfLifeError::InvalidDateFormat(format!(
+        "date not recognized: {}",
+        s
+    )))
 }
 
 #[cfg(test)]
@@ -534,7 +581,7 @@ mod tests {
                 ),
             ),
             (
-                // create by parsing WITH ERROR
+                // create by parsing WITH ERROR / no amount
                 TxRecord::from_str("we bought nothing #nice #living 100d"),
                 (
                     Err(()),                                                // ok/error
@@ -646,6 +693,27 @@ mod tests {
                     (None, 0.0 as f64),
                 ),
             ),
+            (
+                // create using new / Invlaid amount
+                TxRecord::new("Building", "not a number"),
+                (
+                    Err(()),
+                    "Building",
+                    today(),
+                    today(),
+                    1,
+                    vec![
+                        ("nice", false),
+                        ("living", false),
+                        ("car", false),
+                        ("transportation", false),
+                        ("lifestyle", false),
+                    ],
+                    (today(), true),
+                    parse_amount("1000000").unwrap(),
+                    (None, 0.0 as f64),
+                ),
+            ),
         ];
 
         // run the test cases
@@ -668,7 +736,6 @@ mod tests {
             assert_eq!(got.get_starts_on(), *starts_on);
             assert_eq!(got.get_ends_on(), *ends_on);
             assert_eq!(got.get_duration_days(), *duration);
-            assert_eq!(got.get_tag_list().len(), got.get_tags().len());
             // check the tags
             tags.iter()
                 .for_each(|(tag, exists)| assert_eq!(got.has_tag(tag), *exists));
@@ -818,6 +885,7 @@ mod tests {
 
     #[test]
     fn test_parsers() {
+        use super::extract_date;
         // parse date
         let r = date_from_str("27/12/2020");
         assert_eq!(r.unwrap(), date(27, 12, 2020));
@@ -826,8 +894,19 @@ mod tests {
         assert_eq!(r.is_err(), true);
         // invalid format
         let r = date_from_str("30/02/20");
-        assert_eq!(r.is_err(), true)
-
-        // parse amount
+        assert_eq!(r.is_err(), true);
+        // dd.mm.yy
+        let r = date_from_str("30.01.20");
+        assert_eq!(r.unwrap(), date(30, 1, 2020));
+        // dd/mm/yy
+        let r = date_from_str("30/01/20");
+        assert_eq!(r.unwrap(), date(30, 1, 2020));
+        // dd.mm.yyyy
+        let r = date_from_str("30/01/2020");
+        assert_eq!(r.unwrap(), date(30, 1, 2020));
+        // extract not matching date
+        // this cannot happen but anyway
+        let r = extract_date("invalid date");
+        assert_eq!(r.unwrap(), today());
     }
 }
