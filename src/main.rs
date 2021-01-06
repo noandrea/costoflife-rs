@@ -1,5 +1,5 @@
 use ::costoflife::{self, TxRecord};
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, ToPrimitive};
 use chrono::NaiveDate;
 use clap::{App, Arg};
 use dialoguer::{theme::ColorfulTheme, Confirm};
@@ -61,6 +61,11 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         .subcommand(
             App::new("summary")
                 .about("print th expenses summary")
+                .author("<write@adgb.me>"),
+        )
+        .subcommand(
+            App::new("tags")
+                .about("print th expenses tags summary")
                 .author("<write@adgb.me>"),
         )
         .get_matches();
@@ -174,6 +179,39 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 "".pad(sizes.3, '-', Alignment::Right, false),
             );
         }
+        Some(("tags", _c)) => {
+            let sizes = (27, 12, 9, 100);
+            // title
+            println!(
+                "{}|{}|{}|{}",
+                "Tag".pad(sizes.0, ' ', Alignment::Left, false),
+                "Count".pad(sizes.1, ' ', Alignment::Left, false),
+                "Diem".pad(sizes.2, ' ', Alignment::Left, false),
+                "%".pad(sizes.3, ' ', Alignment::Left, false),
+            );
+            // separator
+            println!(
+                "{}|{}|{}|{}",
+                "".pad(sizes.0, '-', Alignment::Right, false),
+                "".pad(sizes.1, '-', Alignment::Right, false),
+                "".pad(sizes.2, '-', Alignment::Right, false),
+                "".pad(sizes.3, '-', Alignment::Right, false),
+            );
+            // total per diem
+            let total = ds.cost_of_life(&target_date).to_f32().unwrap();
+            // data
+            ds.tags(&target_date).iter().for_each(|(tag, count, cost)| {
+                // ⧚ ░ ◼ ▪ this are characters that can be used for the bar
+                let perc = (cost.to_f32().unwrap() * 100.0) / total; // this is the percentage of completion
+                println!(
+                    "{}|{}|{}|{}",
+                    tag.pad(sizes.0, ' ', Alignment::Left, true),
+                    format!("{}", count).pad(sizes.1, ' ', Alignment::Right, false),
+                    format!("{}€", cost).pad(sizes.2, ' ', Alignment::Right, false),
+                    format!("{:.2}", perc).pad(perc as usize, '▮', Alignment::Right, false),
+                )
+            });
+        }
         Some((&_, _)) | None => {}
     }
 
@@ -217,6 +255,8 @@ impl DataStore {
         Ok(())
     }
 
+    /// Compute the cost of life for the
+    ///
     fn cost_of_life(&self, d: &NaiveDate) -> BigDecimal {
         self.data
             .iter() // loop through data
@@ -229,7 +269,7 @@ impl DataStore {
             .with_scale(2) // apply the scale
     }
 
-    /// compile a summary of the active costs, returning a tuple with
+    /// Compile a summary of the active costs, returning a tuple with
     /// (title, total amount, cost per day, percentage payed)
     fn summary(&self, d: &NaiveDate) -> Vec<(String, BigDecimal, BigDecimal, f64)> {
         let mut s = self
@@ -250,26 +290,55 @@ impl DataStore {
         s
     }
 
+    /// return tags and sum of amount
+    ///
+    fn tags(&self, d: &NaiveDate) -> Vec<(String, usize, BigDecimal)> {
+        // counters here
+        let mut agg: HashMap<String, (usize, BigDecimal)> = HashMap::new();
+        // aggregate tags
+        self.data
+            .iter()
+            .filter(|(_h, tx)| tx.is_active_on(d))
+            .for_each(|(_h, tx)| {
+                tx.get_tags().iter().for_each(|tg| {
+                    let (n, a) = match agg.get(tg) {
+                        Some((n, a)) => (n + 1, a + tx.per_diem()),
+                        None => (1, tx.per_diem()),
+                    };
+                    agg.insert(tg.to_string(), (n, a));
+                    // * agg.entry(*tg).or_insert((1, tx.per_diem())) +=(1, tx.per_diem());
+                });
+            });
+        // return
+        let mut s = agg
+            .iter()
+            .map(|(tag, v)| (tag.to_string(), v.0, v.1.clone()))
+            .collect::<Vec<(String, usize, BigDecimal)>>();
+        // sort the results descending by count
+        s.sort_by(|a, b| (b.2).partial_cmp(&a.2).unwrap());
+        s
+    }
+
     /// Insert a new tx record
     /// if the record exists returns the existing one
     fn insert(&mut self, tx: &TxRecord) -> Option<TxRecord> {
         self.data.insert(Self::hash(tx), tx.clone())
     }
 
-    /// Get the size of the datastore
-    ///
-    /// # Arguments
-    ///
-    /// * `on` - A Option<chrono:NaiveDate> to filter for active transactions
-    ///
-    /// if the Option is None then the full size is returned
-    ///
-    pub fn size(&self, on: Option<NaiveDate>) -> usize {
-        match on {
-            Some(date) => self.summary(&date).len(),
-            None => self.data.len(),
-        }
-    }
+    // /// Get the size of the datastore
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `on` - A Option<chrono:NaiveDate> to filter for active transactions
+    // ///
+    // /// if the Option is None then the full size is returned
+    // ///
+    // pub fn size(&self, on: Option<NaiveDate>) -> usize {
+    //     match on {
+    //         Some(date) => self.summary(&date).len(),
+    //         None => self.data.len(),
+    //     }
+    // }
 
     // The output is wrapped in a Result to allow matching on errors
     // Returns an Iterator to the Reader of the lines of the file.
