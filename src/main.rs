@@ -182,6 +182,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         Some(("tags", _c)) => {
             let sizes = (27, 12, 9, 100);
             // title
+
             println!(
                 "{}|{}|{}|{}",
                 "Tag".pad(sizes.0, ' ', Alignment::Left, false),
@@ -211,6 +212,14 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                     format!("{:.2}", perc).pad(perc as usize, '▮', Alignment::Right, false),
                 )
             });
+            // separator
+            println!(
+                "{}|{}|{}|{}",
+                "".pad(sizes.0, '-', Alignment::Right, false),
+                "".pad(sizes.1, '-', Alignment::Right, false),
+                "".pad(sizes.2, '-', Alignment::Right, false),
+                "".pad(sizes.3, '-', Alignment::Right, false),
+            );
         }
         Some((&_, _)) | None => {}
     }
@@ -255,18 +264,10 @@ impl DataStore {
         Ok(())
     }
 
-    /// Compute the cost of life for the
+    /// Retrieve the cost of life for a date
     ///
     fn cost_of_life(&self, d: &NaiveDate) -> BigDecimal {
-        self.data
-            .iter() // loop through data
-            .filter(|(_k, v)| v.is_active_on(d)) // is still an active expense
-            .map(|(_k, v)| {
-                //println!("{} {}", v.get_name(), v.per_diem_raw());
-                v.per_diem_raw() // get the amount
-            })
-            .sum::<BigDecimal>() // sum all the amount
-            .with_scale(2) // apply the scale
+        costoflife::cost_of_life(self.data.values(), d)
     }
 
     /// Compile a summary of the active costs, returning a tuple with
@@ -325,20 +326,20 @@ impl DataStore {
         self.data.insert(Self::hash(tx), tx.clone())
     }
 
-    // /// Get the size of the datastore
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `on` - A Option<chrono:NaiveDate> to filter for active transactions
-    // ///
-    // /// if the Option is None then the full size is returned
-    // ///
-    // pub fn size(&self, on: Option<NaiveDate>) -> usize {
-    //     match on {
-    //         Some(date) => self.summary(&date).len(),
-    //         None => self.data.len(),
-    //     }
-    // }
+    /// Get the size of the datastore
+    ///
+    /// # Arguments
+    ///
+    /// * `on` - A Option<chrono:NaiveDate> to filter for active transactions
+    ///
+    /// if the Option is None then the full size is returned
+    ///
+    pub fn size(&self, on: Option<NaiveDate>) -> usize {
+        match on {
+            Some(date) => self.summary(&date).len(),
+            None => self.data.len(),
+        }
+    }
 
     // The output is wrapped in a Result to allow matching on errors
     // Returns an Iterator to the Reader of the lines of the file.
@@ -388,6 +389,33 @@ mod tests {
         // summary test
         let summary = ds.summary(&costoflife::today());
         assert_eq!(summary.len(), 2);
+
+        // test tags
+        let mut ds = DataStore::new();
+        // insert one entry
+        ds.insert(&TxRecord::from_str("Test#1 10€ #tag1").unwrap());
+        ds.insert(&TxRecord::from_str("Test#2 20€ #tag2").unwrap());
+        ds.insert(&TxRecord::from_str("Test#3 50€ #tag3").unwrap());
+        ds.insert(&TxRecord::from_str("Test#4 40€ #tag2").unwrap());
+
+        let tags = ds.tags(&costoflife::today());
+        assert_eq!(tags.len(), 3);
+        // tag2
+        let got = &tags[0];
+        let exp = (
+            String::from("tag2"),
+            2 as usize,
+            costoflife::parse_amount("60").unwrap(),
+        );
+        assert_eq!(*got, exp);
+        // tag3
+        let got = &tags[1];
+        let exp = (
+            String::from("tag3"),
+            1 as usize,
+            costoflife::parse_amount("50").unwrap(),
+        );
+        assert_eq!(*got, exp);
 
         // test load
         let mut ds = DataStore::new();

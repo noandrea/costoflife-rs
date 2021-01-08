@@ -1,3 +1,10 @@
+//! The [`CostOf.Life`] calculator library.
+//!
+//! Provides functions to calculate the per diem cost
+//! of an expense over a time range.
+//!
+//! [`CostOf.Life`]: http://thecostof.life
+
 use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive, Zero};
 use chrono::{DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, Utc};
 use lazy_static::lazy_static;
@@ -9,7 +16,16 @@ use std::fmt;
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
-/// Purely for wasm
+/// Rounding factor for big decimals
+const SCALE: i64 = 2;
+
+/// Exposes the per diem calculation to wasm
+///
+/// # Arguments
+///
+/// * `s` - A string slice that holds the specs for the transaction
+///
+///
 #[wasm_bindgen]
 pub fn costoflife_per_diem(s: &str) -> f32 {
     match TxRecord::from_str(s) {
@@ -18,6 +34,9 @@ pub fn costoflife_per_diem(s: &str) -> f32 {
     }
 }
 
+/// A simple wasm function for testing
+///
+/// Always return 42.0
 #[wasm_bindgen]
 pub fn costoflife_greetings() -> f32 {
     42.0
@@ -106,6 +125,8 @@ pub enum Lifetime {
     Day { amount: i64, times: i64 },
 }
 
+/// The time range with duration and repetition
+///
 impl Lifetime {
     /// Returns the number of days from a given date.
     ///
@@ -138,6 +159,12 @@ impl Lifetime {
     }
 
     /// Approximates the size of the lifetime
+    ///
+    /// this function differs from the `get_days_since` by the
+    /// fact that the size of months and years is approximated:
+    /// - A year is 365.25 days
+    /// - A month is 30.44 days
+    ///
     fn get_days_approx(&self) -> f64 {
         match self {
             Self::Year { amount, times } => 365.25 * f64::from_i64(amount * times).unwrap(),
@@ -148,6 +175,9 @@ impl Lifetime {
         }
     }
 
+    /// Get the number of duration repeats for the current lifetime
+    ///
+    ///
     pub fn get_repeats(&self) -> i64 {
         match self {
             Self::Year { times, .. } => *times,
@@ -202,6 +232,9 @@ pub struct TxRecord {
     src: Option<String>,
 }
 
+/// Holds a transaction informations
+///
+///
 impl TxRecord {
     // Getters
     pub fn get_name(&self) -> &str {
@@ -218,7 +251,7 @@ impl TxRecord {
     }
     /// Get the amount for the tx, rounded to 2 decimals
     pub fn get_amount(&self) -> BigDecimal {
-        self.amount.with_scale(2)
+        self.amount.with_scale(SCALE)
     }
     /// Get the lifetime for the tx
     pub fn get_lifetime(&self) -> &Lifetime {
@@ -258,13 +291,14 @@ impl TxRecord {
     /// and round it to the 2 decimals
     ///
     pub fn per_diem(&self) -> BigDecimal {
-        self.per_diem_raw().with_scale(2)
+        self.per_diem_raw().with_scale(SCALE)
     }
     /// Calculates and returns the per diem for the record
     ///
     /// The per diem is calculated as follow:
-    /// END_DAY = START_DAY + (RECURRENCE_SIZE_DAYS * SEC_IN_DAYS  * RECURRENCE_TIMES)
-    /// PER_DIEM = AMOUNT * RECURRENCE_TIMES) / (END_DAY - START_DAY )
+    ///
+    /// * END_DAY = START_DAY + (RECURRENCE_SIZE_DAYS * SEC_IN_DAYS  * RECURRENCE_TIMES)
+    /// * PER_DIEM = AMOUNT * RECURRENCE_TIMES) / (END_DAY - START_DAY )
     ///
     pub fn per_diem_raw(&self) -> BigDecimal {
         let duration_days = BigDecimal::from_i64(self.get_duration_days()).unwrap();
@@ -484,6 +518,19 @@ impl PartialEq for TxRecord {
     }
 }
 
+/// Compute the cost of life for a set of transactions
+///
+pub fn cost_of_life<'a, I>(txs: I, on: &NaiveDate) -> BigDecimal
+where
+    I: Iterator<Item = &'a TxRecord>,
+{
+    txs.filter(|tx| tx.is_active_on(on)) // is still an active expense
+        .map(|tx| tx.per_diem_raw())
+        .sum::<BigDecimal>() // sum all the amount
+        .with_scale(SCALE) // apply the scale
+}
+
+/// Parse a string amount into a big decimal
 pub fn parse_amount(v: &str) -> Result<BigDecimal> {
     Ok(BigDecimal::from_str(v)?)
 }
@@ -498,7 +545,16 @@ pub fn now_local() -> DateTime<FixedOffset> {
     DateTime::from(Local::now())
 }
 
-/// Parse a date
+/// Builds a date from day/month/year numeric
+///
+/// # Examples
+///
+/// ```
+/// use costoflife;
+///
+/// let d = costoflife::date(1, 1, 2001); // 2001-01-01
+///
+/// ```
 pub fn date(d: u32, m: u32, y: i32) -> NaiveDate {
     NaiveDate::from_ymd(y, m, d)
 }
@@ -531,11 +587,13 @@ pub mod wasm_tests {
     use wasm_bindgen_test::*;
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
+    #[test]
     #[wasm_bindgen_test]
     fn test_greetings() {
         assert_eq!(super::costoflife_greetings(), 42.0);
     }
 
+    #[test]
     #[wasm_bindgen_test]
     fn test_per_diem() {
         assert_eq!(super::costoflife_per_diem("20€ rent"), 20.0);
@@ -907,5 +965,20 @@ mod tests {
         // this cannot happen but anyway
         let r = extract_date("invalid date");
         assert_eq!(r.unwrap(), today());
+    }
+
+    #[test]
+    fn test_costoflife() {
+        let txs = vec![
+            // insert one entry
+            TxRecord::new("Test#1", "10.2311321").unwrap(),
+            TxRecord::new("Test#2", "10.5441231").unwrap(),
+            TxRecord::new("Test#3", "70.199231321").unwrap(),
+        ];
+        // simple insert
+        assert_eq!(
+            cost_of_life(txs.iter(), &today()),
+            parse_amount("90.97").unwrap()
+        );
     }
 }
