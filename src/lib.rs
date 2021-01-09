@@ -115,6 +115,8 @@ fn extract_lifetime(text: &str) -> (&str, i64, i64) {
     }
 }
 
+/// A time range with duration and repetition
+///
 #[derive(Debug, Copy, Clone)]
 pub enum Lifetime {
     // amount, times
@@ -125,8 +127,6 @@ pub enum Lifetime {
     Day { amount: i64, times: i64 },
 }
 
-/// The time range with duration and repetition
-///
 impl Lifetime {
     /// Returns the number of days from a given date.
     ///
@@ -308,7 +308,7 @@ impl TxRecord {
     /// Get the progress of the transaction at date
     ///
     /// None will use today as a data
-    pub fn get_progress(&self, d: &Option<NaiveDate>) -> f64 {
+    pub fn get_progress(&self, d: &Option<NaiveDate>) -> f32 {
         let d = match d {
             Some(d) => *d,
             None => today(),
@@ -324,9 +324,9 @@ impl TxRecord {
             return 1.0;
         }
         // total number of days
-        let n = (end - start).num_days() as f64;
+        let n = (end - start).num_days() as f32;
         // number of elapsed days
-        let y = (d - start).num_days() as f64;
+        let y = (d - start).num_days() as f32;
         // duration percentage
         y / n
     }
@@ -620,7 +620,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0 as f64), // progress                                                 // PARSE ERROR
+                    (Some(today()), 0.0 as f32), // progress                                                 // PARSE ERROR
                 ),
             ),
             (
@@ -635,7 +635,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0 as f64), // progress                                                 // PARSE ERROR
+                    (Some(today()), 0.0 as f32), // progress                                                 // PARSE ERROR
                 ),
             ),
             (
@@ -650,7 +650,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0 as f64),                            // progress
+                    (Some(today()), 0.0 as f32),                            // progress
                 ),
             ),
             (
@@ -665,7 +665,7 @@ mod tests {
                     vec![("home", false), ("rent", true)], // tags
                     (today(), false),                      // is active
                     parse_amount("56.84").unwrap(),        // per diem
-                    (None, 1.0 as f64),                    // progress
+                    (None, 1.0 as f32),                    // progress
                 ),
             ),
             (
@@ -680,7 +680,7 @@ mod tests {
                     vec![("home", false), ("rent", true), ("#2018", false)], // tags
                     (today(), false),                                        // is active
                     parse_amount("58.84").unwrap(),                          // per diem
-                    (None, 1.0 as f64),                                      // progress
+                    (None, 1.0 as f32),                                      // progress
                 ),
             ),
             (
@@ -695,7 +695,7 @@ mod tests {
                     vec![("internet", true)],                            // tags
                     (date(12, 5, 2021), true),                           // is active
                     parse_amount("1.42").unwrap(),                       // per diem
-                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f64), // progress
+                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f32), // progress
                 ),
             ),
             (
@@ -727,7 +727,7 @@ mod tests {
                     ],
                     (date(01, 01, 2030), false),
                     parse_amount("13.68").unwrap(),
-                    (Some(date(01, 10, 2020)), 0.537513691128149 as f64),
+                    (Some(date(01, 10, 2020)), 0.537513691128149 as f32),
                 ),
             ),
             (
@@ -748,7 +748,7 @@ mod tests {
                     ],
                     (today(), true),
                     parse_amount("1000000").unwrap(),
-                    (None, 0.0 as f64),
+                    (None, 0.0 as f32),
                 ),
             ),
             (
@@ -769,7 +769,7 @@ mod tests {
                     ],
                     (today(), true),
                     parse_amount("1000000").unwrap(),
-                    (None, 0.0 as f64),
+                    (None, 0.0 as f32),
                 ),
             ),
         ];

@@ -1,16 +1,17 @@
-use ::costoflife::{self, TxRecord};
-use bigdecimal::{BigDecimal, ToPrimitive};
-use chrono::NaiveDate;
+mod ledger;
+use ledger::DataStore;
+
 use clap::{App, Arg};
 use dialoguer::{theme::ColorfulTheme, Confirm};
 use directories::ProjectDirs;
 use pad::{Alignment, PadStr};
-use std::collections::HashMap;
+
 use std::error;
 use std::fs;
-use std::fs::File;
-use std::io::{self, BufRead, LineWriter, Write};
 use std::path::Path;
+
+use Alignment::*;
+use Cell::*;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const DB_FILENAME: &str = "costoflife.data.txt";
@@ -141,289 +142,165 @@ fn main() -> Result<(), Box<dyn error::Error>> {
             }
         }
         Some(("summary", _c)) => {
-            let sizes = (27, 12, 9, 100);
+            let mut p = Printer::new(vec![27, 12, 9, 100]);
             // title
-            println!(
-                "{}|{}|{}|{}",
-                "Item".pad(sizes.0, ' ', Alignment::Left, false),
-                "Price".pad(sizes.1, ' ', Alignment::Left, false),
-                "Diem".pad(sizes.2, ' ', Alignment::Left, false),
-                "Progress".pad(sizes.3, ' ', Alignment::Left, false),
-            );
-            // separator
-            println!(
-                "{}|{}|{}|{}",
-                "".pad(sizes.0, '-', Alignment::Right, false),
-                "".pad(sizes.1, '-', Alignment::Right, false),
-                "".pad(sizes.2, '-', Alignment::Right, false),
-                "".pad(sizes.3, '-', Alignment::Right, false),
-            );
+            p.head(vec!["Item", "Price", "Diem", "Progress"]);
+            p.sep();
+
             // data
-            ds.summary(&target_date).iter().for_each(|v| {
-                // ⧚ ░ ◼ ▪ this are characters that can be used for the bar
-                let perc = v.3 * 100.0; // this is the percentage of completion
-                println!(
-                    "{}|{}|{}|{}",
-                    v.0.pad(sizes.0, ' ', Alignment::Left, true),
-                    format!("{}€", v.1).pad(sizes.1, ' ', Alignment::Right, false),
-                    format!("{}€", v.2).pad(sizes.2, ' ', Alignment::Right, false),
-                    format!("{:.2}", perc).pad(perc as usize, '▮', Alignment::Right, false),
-                )
-            });
+            ds.summary(&target_date)
+                .iter()
+                .for_each(|(itm, total, per_diem, prog)| {
+                    // ⧚ ░ ◼ ▪ this are characters that can be used for the bar
+                    p.row(vec![
+                        Str(itm.to_string()),
+                        Amt(*total),
+                        Amt(*per_diem),
+                        Pcent(*prog), // completion percentage
+                    ]);
+                });
             // separator
-            println!(
-                "{}|{}|{}|{}",
-                "".pad(sizes.0, '-', Alignment::Right, false),
-                "".pad(sizes.1, '-', Alignment::Right, false),
-                "".pad(sizes.2, '-', Alignment::Right, false),
-                "".pad(sizes.3, '-', Alignment::Right, false),
-            );
+            p.sep();
+            p.render();
         }
         Some(("tags", _c)) => {
-            let sizes = (27, 12, 9, 100);
-            // title
+            let mut p = Printer::new(vec![27, 12, 9, 100]);
 
-            println!(
-                "{}|{}|{}|{}",
-                "Tag".pad(sizes.0, ' ', Alignment::Left, false),
-                "Count".pad(sizes.1, ' ', Alignment::Left, false),
-                "Diem".pad(sizes.2, ' ', Alignment::Left, false),
-                "%".pad(sizes.3, ' ', Alignment::Left, false),
-            );
-            // separator
-            println!(
-                "{}|{}|{}|{}",
-                "".pad(sizes.0, '-', Alignment::Right, false),
-                "".pad(sizes.1, '-', Alignment::Right, false),
-                "".pad(sizes.2, '-', Alignment::Right, false),
-                "".pad(sizes.3, '-', Alignment::Right, false),
-            );
+            p.head(vec!["Title", "Count", "Diem", "%"]);
+            p.sep();
+
             // total per diem
-            let total = ds.cost_of_life(&target_date).to_f32().unwrap();
+            let total = ds.cost_of_life(&target_date);
             // data
             ds.tags(&target_date).iter().for_each(|(tag, count, cost)| {
-                // ⧚ ░ ◼ ▪ this are characters that can be used for the bar
-                let perc = (cost.to_f32().unwrap() * 100.0) / total; // this is the percentage of completion
-                println!(
-                    "{}|{}|{}|{}",
-                    tag.pad(sizes.0, ' ', Alignment::Left, true),
-                    format!("{}", count).pad(sizes.1, ' ', Alignment::Right, false),
-                    format!("{}€", cost).pad(sizes.2, ' ', Alignment::Right, false),
-                    format!("{:.2}", perc).pad(perc as usize, '▮', Alignment::Right, false),
-                )
+                p.row(vec![
+                    Str(tag.to_string()),
+                    Cnt(*count),
+                    Amt(*cost),
+                    Pcent(cost / total), // tag amount over total
+                ]);
             });
             // separator
-            println!(
-                "{}|{}|{}|{}",
-                "".pad(sizes.0, '-', Alignment::Right, false),
-                "".pad(sizes.1, '-', Alignment::Right, false),
-                "".pad(sizes.2, '-', Alignment::Right, false),
-                "".pad(sizes.3, '-', Alignment::Right, false),
-            );
+            p.sep();
+            p.render();
         }
         Some((&_, _)) | None => {}
     }
-
     println!("Today CostOf.Life is: {}€", ds.cost_of_life(&target_date));
     Ok(())
 }
 
 #[derive(Debug)]
-struct DataStore {
-    data: HashMap<blake3::Hash, TxRecord>,
+enum Cell {
+    Amt(f32),    // amount
+    Pcent(f32),  // percent
+    Str(String), // string
+    Cnt(usize),  // counter
+    Sep,
 }
 
-impl DataStore {
-    pub fn new() -> DataStore {
-        DataStore {
-            data: HashMap::new(),
+#[derive(Debug)]
+struct Printer {
+    sizes: Vec<usize>,
+    data: Vec<Vec<Cell>>,
+    col_sep: String,
+    row_sep: char,
+    progress: char,
+}
+
+impl Printer {
+    pub fn new(col_sizes: Vec<usize>) -> Printer {
+        Printer {
+            sizes: col_sizes,
+            data: Vec::new(),
+            row_sep: '-',
+            progress: '▮',
+            col_sep: "|".to_string(),
         }
     }
 
-    /// Load the datastore with the records found
-    /// at log_file path
-    pub fn load(&mut self, log_file: &Path) -> Result<(), std::io::Error> {
-        // read path
-        if let Ok(lines) = DataStore::read_lines(log_file) {
-            for line in lines {
-                let record = line?;
-                if let Ok(tx) = TxRecord::from_string_record(&record) {
-                    self.data.insert(Self::hash(&tx), tx);
-                }
-            }
-        }
-        Ok(())
+    pub fn row(&mut self, row_data: Vec<Cell>) {
+        self.data.push(row_data);
     }
 
-    pub fn save(&self, log_file: &Path) -> Result<(), std::io::Error> {
-        let mut file = LineWriter::new(File::create(log_file)?);
-        self.data.iter().for_each(|v| {
-            file.write(v.1.to_string_record().as_bytes()).ok();
-        });
-        file.flush()?;
-        Ok(())
+    pub fn head(&mut self, head_data: Vec<&str>) {
+        self.row(head_data.iter().map(|v| Str(v.to_string())).collect());
     }
 
-    /// Retrieve the cost of life for a date
-    ///
-    fn cost_of_life(&self, d: &NaiveDate) -> BigDecimal {
-        costoflife::cost_of_life(self.data.values(), d)
+    pub fn sep(&mut self) {
+        self.row(self.sizes.iter().map(|_| Sep).collect());
     }
 
-    /// Compile a summary of the active costs, returning a tuple with
-    /// (title, total amount, cost per day, percentage payed)
-    fn summary(&self, d: &NaiveDate) -> Vec<(String, BigDecimal, BigDecimal, f64)> {
-        let mut s = self
-            .data
-            .iter()
-            .filter(|(_k, v)| v.is_active_on(d))
-            .map(|(_k, v)| {
-                (
-                    String::from(v.get_name()),
-                    v.get_amount_total(),
-                    v.per_diem(),
-                    v.get_progress(&Some(*d)),
-                )
-            })
-            .collect::<Vec<(String, BigDecimal, BigDecimal, f64)>>();
-        // sort the results descending by completion
-        s.sort_by(|a, b| (b.3).partial_cmp(&a.3).unwrap());
-        s
-    }
-
-    /// return tags and sum of amount
-    ///
-    fn tags(&self, d: &NaiveDate) -> Vec<(String, usize, BigDecimal)> {
-        // counters here
-        let mut agg: HashMap<String, (usize, BigDecimal)> = HashMap::new();
-        // aggregate tags
+    pub fn to_string(&self) -> String {
         self.data
             .iter()
-            .filter(|(_h, tx)| tx.is_active_on(d))
-            .for_each(|(_h, tx)| {
-                tx.get_tags().iter().for_each(|tg| {
-                    let (n, a) = match agg.get(tg) {
-                        Some((n, a)) => (n + 1, a + tx.per_diem()),
-                        None => (1, tx.per_diem()),
-                    };
-                    agg.insert(tg.to_string(), (n, a));
-                    // * agg.entry(*tg).or_insert((1, tx.per_diem())) +=(1, tx.per_diem());
-                });
-            });
-        // return
-        let mut s = agg
-            .iter()
-            .map(|(tag, v)| (tag.to_string(), v.0, v.1.clone()))
-            .collect::<Vec<(String, usize, BigDecimal)>>();
-        // sort the results descending by count
-        s.sort_by(|a, b| (b.2).partial_cmp(&a.2).unwrap());
-        s
+            .map(|row| {
+                row.iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        let s = self.sizes[i];
+                        match c {
+                            Str(v) => v.pad(s, ' ', Left, false),
+                            Amt(v) => format!("{}€", v).pad(s, ' ', Right, false),
+                            Cnt(v) => format!("{}", v).pad(s, ' ', Right, false),
+                            Pcent(v) => {
+                                let p = v * 100.0;
+                                let b = (p as usize * s) / 100; // bar length
+                                format!("{:.2}", p).pad(b, self.progress, Right, false)
+                            }
+                            Sep => "".pad(s, self.row_sep, Alignment::Right, false),
+                        }
+                    })
+                    .collect::<Vec<String>>()
+                    .join(&self.col_sep)
+            })
+            .collect::<Vec<String>>()
+            .join("\n")
     }
 
-    /// Insert a new tx record
-    /// if the record exists returns the existing one
-    fn insert(&mut self, tx: &TxRecord) -> Option<TxRecord> {
-        self.data.insert(Self::hash(tx), tx.clone())
-    }
-
-    /// Get the size of the datastore
-    ///
-    /// # Arguments
-    ///
-    /// * `on` - A Option<chrono:NaiveDate> to filter for active transactions
-    ///
-    /// if the Option is None then the full size is returned
-    ///
-    pub fn size(&self, on: Option<NaiveDate>) -> usize {
-        match on {
-            Some(date) => self.summary(&date).len(),
-            None => self.data.len(),
-        }
-    }
-
-    // The output is wrapped in a Result to allow matching on errors
-    // Returns an Iterator to the Reader of the lines of the file.
-    fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-    where
-        P: AsRef<Path>,
-    {
-        let file = File::open(filename)?;
-        Ok(io::BufReader::new(file).lines())
-    }
-    /// Compute the blake3 has for a TxRecord
-    ///
-    /// The hash is calculated on
-    /// - name
-    /// - lifetime
-    /// - starts_on
-    /// - amount
-    ///
-    fn hash(tx: &TxRecord) -> blake3::Hash {
-        let fields = format!(
-            "{}:{}:{}:{}",
-            tx.get_name(),
-            tx.get_amount(),
-            tx.get_lifetime(),
-            tx.get_starts_on(),
-        );
-        blake3::hash(fields.as_bytes())
+    pub fn render(&self) {
+        println!("{}", self.to_string());
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::costoflife::{self, TxRecord};
 
     #[test]
-    fn test_datastore() {
-        let mut ds = DataStore::new();
-        // insert one entry
-        ds.insert(&TxRecord::new("Test#1", "10").unwrap());
-        ds.insert(&TxRecord::new("Test#2", "10").unwrap());
-        // simple insert
-        assert_eq!(
-            ds.cost_of_life(&costoflife::today()),
-            costoflife::parse_amount("20").unwrap()
-        );
-        // summary test
-        let summary = ds.summary(&costoflife::today());
-        assert_eq!(summary.len(), 2);
+    fn test_printer() {
+        let mut p = Printer::new(vec![5, 10, 10, 50]);
+        p.head(vec!["a", "b", "c", "d"]);
+        p.sep();
+        p.row(vec![
+            Str("One".to_string()),
+            Amt(80.0),
+            Cnt(100),
+            Pcent(0.1043), // completion percentage
+        ]);
+        p.row(vec![
+            Str("Two".to_string()),
+            Amt(59.0),
+            Cnt(321),
+            Pcent(0.0420123123), // completion percentage
+        ]);
+        p.row(vec![
+            Str("Three".to_string()),
+            Amt(220.0),
+            Cnt(11),
+            Pcent(0.309312321), // completion percentage
+        ]);
+        p.sep();
 
-        // test tags
-        let mut ds = DataStore::new();
-        // insert one entry
-        ds.insert(&TxRecord::from_str("Test#1 10€ #tag1").unwrap());
-        ds.insert(&TxRecord::from_str("Test#2 20€ #tag2").unwrap());
-        ds.insert(&TxRecord::from_str("Test#3 50€ #tag3").unwrap());
-        ds.insert(&TxRecord::from_str("Test#4 40€ #tag2").unwrap());
+        let printed =
+            "a    |b         |c         |d                                                 
+-----|----------|----------|--------------------------------------------------
+One  |       80€|       100|10.43
+Two  |       59€|       321|4.20
+Three|      220€|        11|▮▮▮▮▮▮▮▮▮▮30.93
+-----|----------|----------|--------------------------------------------------";
 
-        let tags = ds.tags(&costoflife::today());
-        assert_eq!(tags.len(), 3);
-        // tag2
-        let got = &tags[0];
-        let exp = (
-            String::from("tag2"),
-            2 as usize,
-            costoflife::parse_amount("60").unwrap(),
-        );
-        assert_eq!(*got, exp);
-        // tag3
-        let got = &tags[1];
-        let exp = (
-            String::from("tag3"),
-            1 as usize,
-            costoflife::parse_amount("50").unwrap(),
-        );
-        assert_eq!(*got, exp);
-
-        // test load
-        let mut ds = DataStore::new();
-        // db path
-        let p = Path::new("./testdata/costoflife.data.txt");
-        // load
-        let r = ds.load(p);
-        assert_eq!(r.is_err(), false);
-        assert_eq!(ds.size(None), 5 as usize);
+        assert_eq!(p.data.len(), 6);
+        assert_eq!(p.to_string(), printed);
     }
 }
