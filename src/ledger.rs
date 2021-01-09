@@ -1,6 +1,7 @@
 use ::costoflife::{self, TxRecord};
 use bigdecimal::{BigDecimal, ToPrimitive};
 use chrono::NaiveDate;
+use simsearch::SimSearch;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, LineWriter, Write};
@@ -8,9 +9,9 @@ use std::path::Path;
 
 /// A simple datastore that can persist data on file
 ///
-#[derive(Debug)]
 pub struct DataStore {
     data: HashMap<blake3::Hash, TxRecord>,
+    index: SimSearch<blake3::Hash>,
 }
 impl DataStore {
     /// Initialize an empty datastore
@@ -18,6 +19,7 @@ impl DataStore {
     pub fn new() -> DataStore {
         DataStore {
             data: HashMap::new(),
+            index: SimSearch::new(),
         }
     }
     /// Load the datastore with the records found
@@ -28,7 +30,14 @@ impl DataStore {
             for line in lines {
                 let record = line?;
                 if let Ok(tx) = TxRecord::from_string_record(&record) {
-                    self.data.insert(Self::hash(&tx), tx);
+                    let th = Self::hash(&tx);
+                    // index for search the title and the tags
+                    self.index.insert(
+                        th,
+                        &format!("{} {}", tx.get_name(), tx.get_tags().join(" ")),
+                    );
+                    // here is the move
+                    self.data.insert(th, tx);
                 }
             }
         }
@@ -51,6 +60,26 @@ impl DataStore {
         costoflife::cost_of_life(self.data.values(), d)
             .to_f32()
             .unwrap()
+    }
+    /// Perform a search for a string in tags and transaction name
+    ///
+    pub fn search(&self, pattern: &str) -> Vec<(String, f32, f32, String, String, f32, String)> {
+        self.index
+            .search(pattern)
+            .iter()
+            .map(|h| {
+                let tx = self.data.get(h).unwrap();
+                (
+                    tx.get_name().to_string(),
+                    tx.get_amount_total().to_f32().unwrap(),
+                    tx.per_diem().to_f32().unwrap(),
+                    tx.get_starts_on().to_string(),
+                    tx.get_ends_on().to_string(),
+                    tx.get_progress(&None),
+                    tx.get_tags().join("/"),
+                )
+            })
+            .collect()
     }
     /// Compile a summary of the active costs, returning a tuple with
     /// (title, total amount, cost per day, percentage payed)
@@ -98,14 +127,20 @@ impl DataStore {
             .collect::<Vec<(String, usize, f32)>>();
         // sort the results descending by count
         s.sort_by(|a, b| (b.2).partial_cmp(&a.2).unwrap());
-        s
+        return s;
     }
     /// Insert a new tx record
     /// if the record exists returns the existing one
     ///
     /// TODO: handle duplicates more gracefully
     pub fn insert(&mut self, tx: &TxRecord) -> Option<TxRecord> {
-        self.data.insert(Self::hash(tx), tx.clone())
+        let th = Self::hash(tx);
+        // index for search the title and the tags
+        self.index.insert(
+            th,
+            &format!("{} {}", tx.get_name(), tx.get_tags().join(" ")),
+        );
+        self.data.insert(th, tx.clone())
     }
     /// Get the size of the datastore
     ///
@@ -181,6 +216,9 @@ mod tests {
         let got = &tags[1];
         let exp = (String::from("tag3"), 1 as usize, 50.0);
         assert_eq!(*got, exp);
+        // test search
+        assert_eq!(ds.search("tag").len(), 4);
+        assert_eq!(ds.search("whatever").len(), 0);
         // test load
         let mut ds = DataStore::new();
         // db path

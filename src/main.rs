@@ -43,7 +43,6 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         .subcommand(
             App::new("add")
                 .about("add new expense")
-                .author("<prez@adgb.me>")
                 .arg(
                     Arg::new("EXP_STR")
                         .about("write the expense string")
@@ -59,15 +58,16 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                         .about("automatically reply yes"),
                 ),
         )
+        .subcommand(App::new("summary").about("print th expenses summary"))
+        .subcommand(App::new("tags").about("print th expenses tags summary"))
         .subcommand(
-            App::new("summary")
-                .about("print th expenses summary")
-                .author("<write@adgb.me>"),
-        )
-        .subcommand(
-            App::new("tags")
-                .about("print th expenses tags summary")
-                .author("<write@adgb.me>"),
+            App::new("search").about("search for a transaction").arg(
+                Arg::new("SEARCH_PATTERN")
+                    .about("pattern to match for tags and/or tx name")
+                    .required(true)
+                    .multiple(true)
+                    .value_terminator("."),
+            ),
         )
         .get_matches();
 
@@ -139,6 +139,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                     }
                     _ => println!("ok, another time"),
                 }
+            } else {
+                println!("Tell me what to add, eg: Car 2000€ .transport 5y")
             }
         }
         Some(("summary", _c)) => {
@@ -183,6 +185,38 @@ fn main() -> Result<(), Box<dyn error::Error>> {
             // separator
             p.sep();
             p.render();
+        }
+        Some(("search", c)) => {
+            let mut p = Printer::new(vec![40, 12, 8, 11, 11, 30, 40]);
+
+            if let Some(values) = c.values_of("SEARCH_PATTERN") {
+                let pattern = values.collect::<Vec<&str>>().join(" ");
+                // no results
+                let res = ds.search(&pattern);
+                if res.len() == 0 {
+                    println!("No matches found ¯\\_(ツ)_/¯");
+                    return Ok(());
+                }
+                // with results
+                p.head(vec!["Item", "Price", "Diem", "Start", "End", "Tags", "%"]);
+                p.sep();
+                // data
+                res.iter()
+                    .for_each(|(itm, price, diem, s, e, pcent, tags)| {
+                        p.row(vec![
+                            Str(itm.to_string()),
+                            Amt(*price),
+                            Amt(*diem),
+                            Str(s.to_string()),
+                            Str(e.to_string()),
+                            Str(tags.to_string()),
+                            Pcent(*pcent),
+                        ])
+                    });
+                // separator
+                p.sep();
+                p.render();
+            }
         }
         Some((&_, _)) | None => {}
     }
@@ -240,7 +274,7 @@ impl Printer {
                     .map(|(i, c)| {
                         let s = self.sizes[i];
                         match c {
-                            Str(v) => v.pad(s, ' ', Left, false),
+                            Str(v) => v.pad(s, ' ', Left, true),
                             Amt(v) => format!("{}€", v).pad(s, ' ', Right, false),
                             Cnt(v) => format!("{}", v).pad(s, ' ', Right, false),
                             Pcent(v) => {
