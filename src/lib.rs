@@ -4,9 +4,9 @@
 //! of an expense over a time range.
 //!
 //! [`CostOf.Life`]: http://thecostof.life
-
+mod utils;
 use bigdecimal::{BigDecimal, FromPrimitive, ToPrimitive, Zero};
-use chrono::{DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, Duration, FixedOffset, NaiveDate};
 use lazy_static::lazy_static;
 use regex::Regex;
 use slug::slugify;
@@ -14,6 +14,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
+// export utils
+pub use utils::*;
 use wasm_bindgen::prelude::*;
 
 /// Rounding factor for big decimals
@@ -65,12 +67,6 @@ impl From<chrono::ParseError> for CostOfLifeError {
     }
 }
 
-impl From<bigdecimal::ParseBigDecimalError> for CostOfLifeError {
-    fn from(error: bigdecimal::ParseBigDecimalError) -> Self {
-        CostOfLifeError::InvalidDateFormat(error.to_string())
-    }
-}
-
 impl Error for CostOfLifeError {}
 
 // initialize regexp
@@ -94,13 +90,13 @@ fn extract_hashtag(text: &str) -> Option<&str> {
         .and_then(|c| c.get(1).map(|m| m.as_str()))
 }
 
-fn extract_date(text: &str) -> Result<NaiveDate> {
+fn extract_date(text: &str) -> Option<NaiveDate> {
     let ds = RE_DATE
         .captures(text)
         .and_then(|c| c.get(1).map(|m| m.as_str()));
     match ds {
-        Some(d) => date_from_str(d),
-        None => Ok(today()),
+        Some(d) => utils::date_from_str(d),
+        None => Some(utils::today()),
     }
 }
 
@@ -167,10 +163,10 @@ impl Lifetime {
     ///
     fn get_days_approx(&self) -> f64 {
         match self {
-            Self::Year { amount, times } => 365.25 * f64::from_i64(amount * times).unwrap(),
-            Self::Month { amount, times } => 30.44 * f64::from_i64(amount * times).unwrap(),
-            Self::Week { amount, times } => 7.0 * f64::from_i64(amount * times).unwrap(),
-            Self::Day { amount, times } => f64::from_i64(amount * times).unwrap(),
+            Self::Year { amount, times } => 365.25 * (amount * times) as f64,
+            Self::Month { amount, times } => 30.44 * (amount * times) as f64,
+            Self::Week { amount, times } => 7.0 * (amount * times) as f64,
+            Self::Day { amount, times } => (amount * times) as f64,
             Self::SingleDay => 1.0,
         }
     }
@@ -311,7 +307,7 @@ impl TxRecord {
     pub fn get_progress(&self, d: &Option<NaiveDate>) -> f32 {
         let d = match d {
             Some(d) => *d,
-            None => today(),
+            None => utils::today(),
         };
         // get the time range
         let (start, end) = (self.starts_on, self.get_ends_on());
@@ -380,9 +376,9 @@ impl TxRecord {
             name,
             Vec::new(),
             amount,
-            today(),
+            utils::today(),
             Lifetime::SingleDay,
-            now_local(),
+            utils::now_local(),
             None,
         )
     }
@@ -433,7 +429,8 @@ impl TxRecord {
                 .iter()
                 .map(|v| (slugify(v), String::from(*v)))
                 .collect(),
-            amount: BigDecimal::from_str(amount)?,
+            amount: parse_amount(amount)
+                .ok_or(CostOfLifeError::InvalidAmount("Invalid amount".to_string()))?,
             lifetime,
             recorded_at,
             starts_on,
@@ -458,7 +455,7 @@ impl TxRecord {
         let mut amount = "0";
         let mut lifetime = Lifetime::SingleDay;
         let mut tags: Vec<&str> = Vec::new();
-        let mut starts_on = today();
+        let mut starts_on = utils::today();
         // search for the stuff we need
         for t in s.split_whitespace() {
             if RE_CURRENCY.is_match(&t) {
@@ -476,7 +473,8 @@ impl TxRecord {
                 lifetime = t.parse::<Lifetime>()?;
             } else if RE_DATE.is_match(t) {
                 // start date
-                starts_on = extract_date(t)?;
+                starts_on =
+                    extract_date(t).ok_or(CostOfLifeError::GenericError(String::from(":")))?;
             } else {
                 // catch all for the name
                 name.push(&t)
@@ -489,7 +487,7 @@ impl TxRecord {
             amount,
             starts_on,
             lifetime,
-            now_local(),
+            utils::now_local(),
             Some(s),
         )
     }
@@ -530,58 +528,6 @@ where
         .with_scale(SCALE) // apply the scale
 }
 
-/// Parse a string amount into a big decimal
-pub fn parse_amount(v: &str) -> Result<BigDecimal> {
-    Ok(BigDecimal::from_str(v)?)
-}
-
-/// Returns the current date
-pub fn today() -> NaiveDate {
-    Utc::today().naive_utc()
-}
-
-/// Returns the datetime with the local timezone
-pub fn now_local() -> DateTime<FixedOffset> {
-    DateTime::from(Local::now())
-}
-
-/// Builds a date from day/month/year numeric
-///
-/// # Examples
-///
-/// ```
-/// use costoflife;
-///
-/// let d = costoflife::date(1, 1, 2001); // 2001-01-01
-///
-/// ```
-pub fn date(d: u32, m: u32, y: i32) -> NaiveDate {
-    NaiveDate::from_ymd(y, m, d)
-}
-
-/// Parse a date from string, it recognizes the formats
-///
-/// - dd/mm/yyyy
-/// - dd.mm.yyyy
-/// - ddmmyy
-/// - dd.mm.yy
-/// - dd/mm/yy
-///
-pub fn date_from_str(s: &str) -> Result<NaiveDate> {
-    let formats = vec!["%d%m%y", "%d.%m.%y", "%d/%m/%y", "%d/%m/%Y", "%d.%m.%Y"];
-    // check all the formats
-    for f in formats {
-        let r = NaiveDate::parse_from_str(s, f);
-        if !r.is_err() {
-            return Ok(r.unwrap());
-        }
-    }
-    Err(CostOfLifeError::InvalidDateFormat(format!(
-        "date not recognized: {}",
-        s
-    )))
-}
-
 #[cfg(test)]
 pub mod wasm_tests {
     use wasm_bindgen_test::*;
@@ -604,6 +550,7 @@ pub mod wasm_tests {
 mod tests {
     use super::*;
     use chrono::Duration;
+    use utils::*;
 
     #[test]
     fn test_tx() {
@@ -770,6 +717,51 @@ mod tests {
                     (today(), true),
                     parse_amount("1000000").unwrap(),
                     (None, 0.0 as f32),
+                ),
+            ),
+            (
+                // from string with week repeats (39,96)
+                TxRecord::from_string_record("2021-01-03T19:36:43.976697738+00:00::2021-04-21::Mobile internet 9.99€ 210421 1w4x #internet"),
+                (
+                    Ok(()),                                              // ok/error
+                    "Mobile internet",                                   // title
+                    date(21, 4, 2021),                                   // starts_on
+                    (date(18, 5, 2021)),                                 // ends_on
+                    28,                                                  // duration days
+                    vec![("internet", true)],                            // tags
+                    (date(12, 5, 2021), true),                           // is active
+                    parse_amount("1.42").unwrap(),                       // per diem
+                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f32), // progress
+                ),
+            ),
+            (
+                // from string with week repeats (39,96) // WITH WRONG DATE
+                TxRecord::from_string_record("2021-01-03T19:36:43.976697738+00:00::2021-14-21::Mobile internet 9.99€ 210421 1w4x #internet"),
+                (
+                    Err(()),                                              // ok/error
+                    "Mobile internet",                                   // title
+                    date(21, 4, 2021),                                   // starts_on
+                    (date(18, 5, 2021)),                                 // ends_on
+                    28,                                                  // duration days
+                    vec![("internet", true)],                            // tags
+                    (date(12, 5, 2021), true),                           // is active
+                    parse_amount("1.42").unwrap(),                       // per diem
+                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f32), // progress
+                ),
+            ),
+            (
+                // from string with week repeats (39,96) // WITH WRONG RECORDED DATE
+                TxRecord::from_string_record("2021-01-32T19:36:43.976697738+00:00::2021-14-21::Mobile internet 9.99€ 210421 1w4x #internet"),
+                (
+                    Err(()),                                              // ok/error
+                    "Mobile internet",                                   // title
+                    date(21, 4, 2021),                                   // starts_on
+                    (date(18, 5, 2021)),                                 // ends_on
+                    28,                                                  // duration days
+                    vec![("internet", true)],                            // tags
+                    (date(12, 5, 2021), true),                           // is active
+                    parse_amount("1.42").unwrap(),                       // per diem
+                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f32), // progress
                 ),
             ),
         ];
@@ -942,25 +934,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parsers() {
-        // parse date
-        let r = date_from_str("27/12/2020");
-        assert_eq!(r.unwrap(), date(27, 12, 2020));
-        // invalid date
-        let r = date_from_str("30/02/2020");
-        assert_eq!(r.is_err(), true);
-        // invalid format
-        let r = date_from_str("30/02/20");
-        assert_eq!(r.is_err(), true);
-        // dd.mm.yy
-        let r = date_from_str("30.01.20");
-        assert_eq!(r.unwrap(), date(30, 1, 2020));
-        // dd/mm/yy
-        let r = date_from_str("30/01/20");
-        assert_eq!(r.unwrap(), date(30, 1, 2020));
-        // dd.mm.yyyy
-        let r = date_from_str("30/01/2020");
-        assert_eq!(r.unwrap(), date(30, 1, 2020));
+    fn test_extract() {
         // extract not matching date
         // this cannot happen but anyway
         let r = extract_date("invalid date");
