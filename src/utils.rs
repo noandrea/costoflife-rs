@@ -8,7 +8,7 @@ pub fn parse_amount(s: &str) -> Option<BigDecimal> {
 
 /// Returns the current date
 pub fn today() -> NaiveDate {
-    Utc::today().naive_utc()
+    Local::today().naive_utc()
 }
 
 /// Returns the datetime with the local timezone
