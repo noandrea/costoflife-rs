@@ -1,9 +1,9 @@
 # CostOf.Life
 
-[![Crates.io](https://img.shields.io/crates/v/costoflife)](https://crates.io/crates/costoflife)
+[![Build](https://github.com/noandrea/costoflife-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/noandrea/costoflife-rs/actions/workflows/rust.yml)
 [![Coverage Status](https://coveralls.io/repos/github/noandrea/costoflife-rs/badge.svg?branch=master)](https://coveralls.io/github/noandrea/costoflife-rs?branch=master)
 [![dependency status](https://deps.rs/repo/github/noandrea/costoflife-rs/status.svg)](https://deps.rs/repo/github/noandrea/costoflife-rs)
-
+[![Crates.io](https://img.shields.io/crates/v/costoflife)](https://crates.io/crates/costoflife)
 
 This is the CostOf.Life library and command line client.
 
