@@ -2,6 +2,8 @@
 
 [![Crates.io](https://img.shields.io/crates/v/costoflife)](https://crates.io/crates/costoflife)
 [![Coverage Status](https://coveralls.io/repos/github/noandrea/costoflife-rs/badge.svg?branch=master)](https://coveralls.io/github/noandrea/costoflife-rs?branch=master)
+[![dependency status](https://deps.rs/repo/github/noandrea/costoflife-rs/status.svg)](https://deps.rs/repo/github/noandrea/costoflife-rs)
+
 
 This is the CostOf.Life library and command line client.
 

@@ -1,9 +1,11 @@
 mod ledger;
 use ledger::DataStore;
 
+mod interaction;
+
 use clap::{App, Arg};
 use dialoguer::{theme::ColorfulTheme, Confirm};
-use directories::ProjectDirs;
+use directories_next::ProjectDirs;
 use pad::{Alignment, PadStr};
 
 use std::error;
