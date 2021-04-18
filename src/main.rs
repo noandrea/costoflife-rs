@@ -202,6 +202,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 // with results
                 p.head(vec!["Item", "Price", "Diem", "Start", "End", "Tags", "%"]);
                 p.sep();
+                // compute the total
+                let mut totals = (0.0, 0.0);
                 // data
                 res.iter()
                     .for_each(|(itm, price, diem, s, e, pcent, tags)| {
@@ -213,10 +215,21 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                             Str(e.to_string()),
                             Str(tags.to_string()),
                             Pcent(*pcent),
-                        ])
+                        ]);
+                        totals = (totals.0 + price, totals.1 + diem);
                     });
                 // separator
                 p.sep();
+                // print the total as well
+                p.row(vec![
+                    Empty,
+                    Amt(totals.0),
+                    Amt(totals.1),
+                    Empty,
+                    Empty,
+                    Empty,
+                    Empty,
+                ]);
                 p.render();
             }
         }
@@ -232,6 +245,7 @@ enum Cell {
     Pcent(f32),  // percent
     Str(String), // string
     Cnt(usize),  // counter
+    Empty,
     Sep,
 }
 
@@ -279,6 +293,7 @@ impl Printer {
                             Str(v) => v.pad(s, ' ', Left, true),
                             Amt(v) => format!("{}€", v).pad(s, ' ', Right, false),
                             Cnt(v) => format!("{}", v).pad(s, ' ', Right, false),
+                            Empty => "".pad(s, ' ', Right, false),
                             Pcent(v) => {
                                 let p = v * 100.0;
                                 let b = (p as usize * s) / 100; // bar length
