@@ -1,5 +1,5 @@
 use bigdecimal::BigDecimal;
-use chrono::{DateTime, FixedOffset, Local, NaiveDate, Utc};
+use chrono::{DateTime, FixedOffset, Local, NaiveDate};
 use std::str::FromStr;
 
 pub fn parse_amount(s: &str) -> Option<BigDecimal> {

@@ -550,7 +550,6 @@ pub mod wasm_tests {
 mod tests {
     use super::*;
     use chrono::Duration;
-    use utils::*;
 
     #[test]
     fn test_tx() {

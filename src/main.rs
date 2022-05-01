@@ -3,7 +3,9 @@ use ledger::DataStore;
 
 mod interaction;
 
-use clap::{App, Arg};
+use std::fmt;
+
+use clap::{Arg, Command};
 use dialoguer::{theme::ColorfulTheme, Confirm};
 use directories_next::ProjectDirs;
 use pad::{Alignment, PadStr};
@@ -21,7 +23,7 @@ const DB_FILENAME: &str = "costoflife.data.txt";
 fn main() -> Result<(), Box<dyn error::Error>> {
     //println!("Welcome to CostOf.Life!");
 
-    let matches = App::new("costoflife")
+    let matches = Command::new("costoflife")
         .version(VERSION)
         .author("Andrea G. <no.andrea@gmail.com>")
         .about("keep track of the cost of your daily life")
@@ -31,7 +33,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 .short('c')
                 .long("config")
                 .value_name("FILE")
-                .about("Sets a custom config file")
+                .help("Sets a custom config file")
                 .takes_value(true),
         )
         .arg(
@@ -39,17 +41,17 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 .short('o')
                 .long("on")
                 .value_name("DATE")
-                .about("use this date to calculate the cost of life")
+                .help("use this date to calculate the cost of life")
                 .takes_value(true),
         )
         .subcommand(
-            App::new("add")
+            Command::new("add")
                 .about("add new expense")
                 .arg(
                     Arg::new("EXP_STR")
-                        .about("write the expense string")
+                        .help("write the expense string")
                         .required(true)
-                        .multiple(true)
+                        .multiple_occurrences(true)
                         .value_terminator("."),
                 )
                 .arg(
@@ -57,19 +59,21 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                         .long("yes")
                         .short('y')
                         .takes_value(false)
-                        .about("automatically reply yes"),
+                        .help("automatically reply yes"),
                 ),
         )
-        .subcommand(App::new("summary").about("print th expenses summary"))
-        .subcommand(App::new("tags").about("print th expenses tags summary"))
+        .subcommand(Command::new("summary").about("print th expenses summary"))
+        .subcommand(Command::new("tags").about("print th expenses tags summary"))
         .subcommand(
-            App::new("search").about("search for a transaction").arg(
-                Arg::new("SEARCH_PATTERN")
-                    .about("pattern to match for tags and/or tx name")
-                    .required(true)
-                    .multiple(true)
-                    .value_terminator("."),
-            ),
+            Command::new("search")
+                .about("search for a transaction")
+                .arg(
+                    Arg::new("SEARCH_PATTERN")
+                        .help("pattern to match for tags and/or tx name")
+                        .required(true)
+                        .multiple_occurrences(true)
+                        .value_terminator("."),
+                ),
         )
         .get_matches();
 
@@ -195,7 +199,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 let pattern = values.collect::<Vec<&str>>().join(" ");
                 // no results
                 let res = ds.search(&pattern);
-                if res.len() == 0 {
+                if res.is_empty() {
                     println!("No matches found ¯\\_(ツ)_/¯");
                     return Ok(());
                 }
@@ -258,6 +262,40 @@ struct Printer {
     progress: char,
 }
 
+impl fmt::Display for Printer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.data
+                .iter()
+                .map(|row| {
+                    row.iter()
+                        .enumerate()
+                        .map(|(i, c)| {
+                            let s = self.sizes[i];
+                            match c {
+                                Str(v) => v.pad(s, ' ', Left, true),
+                                Amt(v) => format!("{}€", v).pad(s, ' ', Right, false),
+                                Cnt(v) => format!("{}", v).pad(s, ' ', Right, false),
+                                Empty => "".pad(s, ' ', Right, false),
+                                Pcent(v) => {
+                                    let p = v * 100.0;
+                                    let b = (p as usize * s) / 100; // bar length
+                                    format!("{:.2}", p).pad(b, self.progress, Right, false)
+                                }
+                                Sep => "".pad(s, self.row_sep, Alignment::Right, false),
+                            }
+                        })
+                        .collect::<Vec<String>>()
+                        .join(&self.col_sep)
+                })
+                .collect::<Vec<String>>()
+                .join("\n")
+        )
+    }
+}
+
 impl Printer {
     pub fn new(col_sizes: Vec<usize>) -> Printer {
         Printer {
@@ -281,36 +319,8 @@ impl Printer {
         self.row(self.sizes.iter().map(|_| Sep).collect());
     }
 
-    pub fn to_string(&self) -> String {
-        self.data
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .enumerate()
-                    .map(|(i, c)| {
-                        let s = self.sizes[i];
-                        match c {
-                            Str(v) => v.pad(s, ' ', Left, true),
-                            Amt(v) => format!("{}€", v).pad(s, ' ', Right, false),
-                            Cnt(v) => format!("{}", v).pad(s, ' ', Right, false),
-                            Empty => "".pad(s, ' ', Right, false),
-                            Pcent(v) => {
-                                let p = v * 100.0;
-                                let b = (p as usize * s) / 100; // bar length
-                                format!("{:.2}", p).pad(b, self.progress, Right, false)
-                            }
-                            Sep => "".pad(s, self.row_sep, Alignment::Right, false),
-                        }
-                    })
-                    .collect::<Vec<String>>()
-                    .join(&self.col_sep)
-            })
-            .collect::<Vec<String>>()
-            .join("\n")
-    }
-
     pub fn render(&self) {
-        println!("{}", self.to_string());
+        println!("{}", self);
     }
 }
 
