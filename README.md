@@ -165,4 +165,8 @@ AlphaNum  ::= #'[A-Za-z0-9_-]'
 Made by [adgb](https://adgb.me)
 
 
+## Techincal Setup
 
+1. Install rust 
+2. Install cargo-edit: `cargo install cargo-edit`. Cargo edit is used to manage dependencies. 
+3. Install cargo-bump: `cargo install cargo-bump`. Cargo bump is used to bump release versions.

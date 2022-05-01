@@ -2,6 +2,26 @@
 ## [Unreleased]
 
 
+<a name="0.3.1"></a>
+## [0.3.1] - 2022-05-02
+### Build
+- **ci:** add github action setup
+
+### Chore
+- updated dependencies
+- rename master branch to main
+- minor library changes
+- update deps
+- reorganize structure
+
+### Feat
+- print the totals for search results
+- **cli:** add search command to search for tx
+
+### Fix
+- use local time to get the tody date
+
+
 <a name="0.3.0"></a>
 ## [0.3.0] - 2021-01-08
 ### Feat
@@ -95,7 +115,8 @@
 <a name="0.1.0"></a>
 ## 0.1.0 - 2020-11-30
 
-[Unreleased]: https://github.com/noandrea/costoflife-rs/compare/0.3.0...HEAD
+[Unreleased]: https://github.com/noandrea/costoflife-rs/compare/0.3.1...HEAD
+[0.3.1]: https://github.com/noandrea/costoflife-rs/compare/0.3.0...0.3.1
 [0.3.0]: https://github.com/noandrea/costoflife-rs/compare/0.2.4...0.3.0
 [0.2.4]: https://github.com/noandrea/costoflife-rs/compare/0.2.3...0.2.4
 [0.2.3]: https://github.com/noandrea/costoflife-rs/compare/0.2.2...0.2.3

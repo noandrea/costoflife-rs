@@ -1,6 +1,6 @@
 [package]
 name = "costoflife"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Andrea Giacobino <no.andrea@gmail.com>"]
 edition = "2018"
 license = "MIT"
