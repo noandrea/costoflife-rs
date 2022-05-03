@@ -108,9 +108,11 @@ git-release:
 	git tag $(GIT_DESCR)
 	git-chglog --output CHANGELOG.md
 	git tag $(GIT_DESCR) --delete
-	git add CHANGELOG.md && git commit -m "$(GIT_DESCR)" -m "Changelog: https://github.com/noandrea/$(APP)/blob/master/CHANGELOG.md"
-	git tag -s -a "$(GIT_DESCR)" -m "Changelog: https://github.com/noandrea/$(APP)/blob/master/CHANGELOG.md"
+	git add CHANGELOG.md && git commit -m "$(GIT_DESCR)" -m "Changelog: https://github.com/noandrea/$(APP)/blob/main/CHANGELOG.md"
 	@echo release complete
+
+git-tag:
+	git tag -s -a "$(GIT_DESCR)" -m "Changelog: https://github.com/noandrea/$(APP)/blob/main/CHANGELOG.md"
 
 
 _release-patch:
