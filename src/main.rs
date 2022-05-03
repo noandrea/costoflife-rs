@@ -13,6 +13,7 @@ use pad::{Alignment, PadStr};
 use std::error;
 use std::fs;
 use std::path::Path;
+use std::str::FromStr;
 
 use Alignment::*;
 use Cell::*;

@@ -1,7 +1,7 @@
 use ::costoflife::{parse_amount, today, CostOfLifeError, TxRecord};
 use dialoguer::console::Term;
 use dialoguer::{theme::ColorfulTheme, Confirm, Input, Password, Select};
-use std::str::FromStr;
+
 use Feat::*;
 use PolarAnswer::*;
 

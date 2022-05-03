@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, LineWriter, Write};
 use std::path::Path;
+use std::str::FromStr;
 
 /// A simple datastore that can persist data on file
 ///
@@ -75,7 +76,7 @@ impl DataStore {
                     tx.per_diem().to_f32().unwrap(),
                     tx.get_starts_on().to_string(),
                     tx.get_ends_on().to_string(),
-                    tx.get_progress(&None),
+                    tx.get_progress(None),
                     tx.get_tags().join("/"),
                 )
             })
@@ -93,7 +94,7 @@ impl DataStore {
                     String::from(v.get_name()),
                     v.get_amount_total().to_f32().unwrap(),
                     v.per_diem().to_f32().unwrap(),
-                    v.get_progress(&Some(*d)),
+                    v.get_progress(Some(*d)),
                 )
             })
             .collect::<Vec<(String, f32, f32, f32)>>();
@@ -127,7 +128,7 @@ impl DataStore {
             .collect::<Vec<(String, usize, f32)>>();
         // sort the results descending by count
         s.sort_by(|a, b| (b.2).partial_cmp(&a.2).unwrap());
-        return s;
+        s
     }
     /// Insert a new tx record
     /// if the record exists returns the existing one

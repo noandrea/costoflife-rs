@@ -304,9 +304,9 @@ impl TxRecord {
     /// Get the progress of the transaction at date
     ///
     /// None will use today as a data
-    pub fn get_progress(&self, d: &Option<NaiveDate>) -> f32 {
+    pub fn get_progress(&self, d: Option<NaiveDate>) -> f32 {
         let d = match d {
-            Some(d) => *d,
+            Some(d) => d,
             None => utils::today(),
         };
         // get the time range
@@ -430,14 +430,11 @@ impl TxRecord {
                 .map(|v| (slugify(v), String::from(*v)))
                 .collect(),
             amount: parse_amount(amount)
-                .ok_or(CostOfLifeError::InvalidAmount("Invalid amount".to_string()))?,
+                .ok_or_else(|| CostOfLifeError::InvalidAmount("Invalid amount".to_string()))?,
             lifetime,
             recorded_at,
             starts_on,
-            src: match src {
-                Some(s) => Some(String::from(s)),
-                _ => None,
-            },
+            src: Some(src).map(|s| String::from(s.unwrap())),
         };
         // validate the amount
         if tx.get_amount() <= BigDecimal::zero() {
@@ -448,8 +445,12 @@ impl TxRecord {
         // all good
         Ok(tx)
     }
+}
 
-    pub fn from_str(s: &str) -> Result<TxRecord> {
+impl FromStr for TxRecord {
+    type Err = CostOfLifeError;
+
+    fn from_str(s: &str) -> Result<Self> {
         // make an empty record
         let mut name: Vec<&str> = Vec::new();
         let mut amount = "0";
@@ -458,14 +459,14 @@ impl TxRecord {
         let mut starts_on = utils::today();
         // search for the stuff we need
         for t in s.split_whitespace() {
-            if RE_CURRENCY.is_match(&t) {
+            if RE_CURRENCY.is_match(t) {
                 // read the currency
                 if let Some(a) = extract_amount(t) {
                     amount = a
                 }
-            } else if RE_HASHTAG.is_match(&t) {
+            } else if RE_HASHTAG.is_match(t) {
                 // add tags
-                if let Some(x) = extract_hashtag(&t) {
+                if let Some(x) = extract_hashtag(t) {
                     tags.push(x);
                 }
             } else if RE_LIFETIME.is_match(t) {
@@ -473,11 +474,11 @@ impl TxRecord {
                 lifetime = t.parse::<Lifetime>()?;
             } else if RE_DATE.is_match(t) {
                 // start date
-                starts_on =
-                    extract_date(t).ok_or(CostOfLifeError::GenericError(String::from(":")))?;
+                starts_on = extract_date(t)
+                    .ok_or_else(|| CostOfLifeError::GenericError(String::from(":")))?;
             } else {
                 // catch all for the name
-                name.push(&t)
+                name.push(t)
             }
         }
         // build the tx record
@@ -490,13 +491,6 @@ impl TxRecord {
             utils::now_local(),
             Some(s),
         )
-    }
-}
-
-impl FromStr for TxRecord {
-    type Err = CostOfLifeError;
-    fn from_str(s: &str) -> Result<TxRecord> {
-        TxRecord::from_str(s)
     }
 }
 
@@ -566,7 +560,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0 as f32), // progress                                                 // PARSE ERROR
+                    (Some(today()), 0.0_f32), // progress                                                 // PARSE ERROR
                 ),
             ),
             (
@@ -581,7 +575,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0 as f32), // progress                                                 // PARSE ERROR
+                    (Some(today()), 0.0_f32), // progress                                                 // PARSE ERROR
                 ),
             ),
             (
@@ -596,7 +590,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0 as f32),                            // progress
+                    (Some(today()), 0.0_f32),                            // progress
                 ),
             ),
             (
@@ -611,7 +605,7 @@ mod tests {
                     vec![("home", false), ("rent", true)], // tags
                     (today(), false),                      // is active
                     parse_amount("56.84").unwrap(),        // per diem
-                    (None, 1.0 as f32),                    // progress
+                    (None, 1.0_f32),                    // progress
                 ),
             ),
             (
@@ -626,7 +620,7 @@ mod tests {
                     vec![("home", false), ("rent", true), ("#2018", false)], // tags
                     (today(), false),                                        // is active
                     parse_amount("58.84").unwrap(),                          // per diem
-                    (None, 1.0 as f32),                                      // progress
+                    (None, 1.0_f32),                                      // progress
                 ),
             ),
             (
@@ -641,7 +635,7 @@ mod tests {
                     vec![("internet", true)],                            // tags
                     (date(12, 5, 2021), true),                           // is active
                     parse_amount("1.42").unwrap(),                       // per diem
-                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f32), // progress
+                    (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
                 ),
             ),
             (
@@ -650,7 +644,7 @@ mod tests {
                     "Car",
                     vec!["transportation", "lifestyle"],
                     "100000",
-                    date(01, 01, 2010),
+                    date(1, 1, 2010),
                     Lifetime::Year {
                         amount: 20,
                         times: 1,
@@ -671,9 +665,9 @@ mod tests {
                         ("transportation", true),
                         ("lifestyle", true),
                     ],
-                    (date(01, 01, 2030), false),
+                    (date(1, 1, 2030), false),
                     parse_amount("13.68").unwrap(),
-                    (Some(date(01, 10, 2020)), 0.537513691128149 as f32),
+                    (Some(date(1, 10, 2020)), 0.537513691128149_f32),
                 ),
             ),
             (
@@ -694,7 +688,7 @@ mod tests {
                     ],
                     (today(), true),
                     parse_amount("1000000").unwrap(),
-                    (None, 0.0 as f32),
+                    (None, 0.0_f32),
                 ),
             ),
             (
@@ -715,7 +709,7 @@ mod tests {
                     ],
                     (today(), true),
                     parse_amount("1000000").unwrap(),
-                    (None, 0.0 as f32),
+                    (None, 0.0_f32),
                 ),
             ),
             (
@@ -730,7 +724,7 @@ mod tests {
                     vec![("internet", true)],                            // tags
                     (date(12, 5, 2021), true),                           // is active
                     parse_amount("1.42").unwrap(),                       // per diem
-                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f32), // progress
+                    (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
                 ),
             ),
             (
@@ -745,7 +739,7 @@ mod tests {
                     vec![("internet", true)],                            // tags
                     (date(12, 5, 2021), true),                           // is active
                     parse_amount("1.42").unwrap(),                       // per diem
-                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f32), // progress
+                    (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
                 ),
             ),
             (
@@ -760,7 +754,7 @@ mod tests {
                     vec![("internet", true)],                            // tags
                     (date(12, 5, 2021), true),                           // is active
                     parse_amount("1.42").unwrap(),                       // per diem
-                    (Some(date(5, 5, 2021)), 0.5185185185185185 as f32), // progress
+                    (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
                 ),
             ),
         ];
@@ -790,12 +784,12 @@ mod tests {
                 .for_each(|(tag, exists)| assert_eq!(got.has_tag(tag), *exists));
             // is active
             let (target_date, is_active) = status;
-            assert_eq!(got.is_active_on(&target_date), *is_active);
+            assert_eq!(got.is_active_on(target_date), *is_active);
             // per diem
             assert_eq!(got.per_diem(), *per_diem);
             // progress
             let (on_date, progress) = progress_test;
-            assert_eq!(got.get_progress(on_date), *progress);
+            assert_eq!(got.get_progress(*on_date), *progress);
             // test serializing deserializing
             let txs = got.to_string_record();
             let txr = TxRecord::from_string_record(&txs).unwrap();
