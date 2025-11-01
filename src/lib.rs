@@ -11,8 +11,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use slug::slugify;
 use std::collections::{BTreeSet, HashMap};
-use std::error::Error;
-use std::fmt;
+use std::fmt::{self};
 use std::str::FromStr;
 // export utils
 pub use utils::*;
@@ -55,19 +54,11 @@ pub enum CostOfLifeError {
     GenericError(String),
 }
 
-impl fmt::Display for CostOfLifeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
 impl From<chrono::ParseError> for CostOfLifeError {
     fn from(error: chrono::ParseError) -> Self {
         CostOfLifeError::InvalidDateFormat(error.to_string())
     }
 }
-
-impl Error for CostOfLifeError {}
 
 // initialize regexp
 lazy_static! {
@@ -208,10 +199,10 @@ impl PartialEq for Lifetime {
 impl fmt::Display for Lifetime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Year { amount, times } => write!(f, "{}y{}x", amount, times),
-            Self::Month { amount, times } => write!(f, "{}m{}x", amount, times),
-            Self::Week { amount, times } => write!(f, "{}w{}x", amount, times),
-            Self::Day { amount, times } => write!(f, "{}d{}x", amount, times),
+            Self::Year { amount, times } => write!(f, "{amount}y{times}x"),
+            Self::Month { amount, times } => write!(f, "{amount}m{times}x"),
+            Self::Week { amount, times } => write!(f, "{amount}w{times}x"),
+            Self::Day { amount, times } => write!(f, "{amount}d{times}x"),
             Self::SingleDay => write!(f, "1d1x"),
         }
     }
@@ -590,7 +581,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0_f32),                            // progress
+                    (Some(today()), 0.0_f32),                               // progress
                 ),
             ),
             (
@@ -605,7 +596,7 @@ mod tests {
                     vec![("home", false), ("rent", true)], // tags
                     (today(), false),                      // is active
                     parse_amount("56.84").unwrap(),        // per diem
-                    (None, 1.0_f32),                    // progress
+                    (None, 1.0_f32),                       // progress
                 ),
             ),
             (
@@ -620,21 +611,21 @@ mod tests {
                     vec![("home", false), ("rent", true), ("#2018", false)], // tags
                     (today(), false),                                        // is active
                     parse_amount("58.84").unwrap(),                          // per diem
-                    (None, 1.0_f32),                                      // progress
+                    (None, 1.0_f32),                                         // progress
                 ),
             ),
             (
                 // from string with week repeats (39,96)
                 TxRecord::from_str("Mobile internet 9.99€ 210421 1w4x #internet"),
                 (
-                    Ok(()),                                              // ok/error
-                    "Mobile internet",                                   // title
-                    date(21, 4, 2021),                                   // starts_on
-                    (date(18, 5, 2021)),                                 // ends_on
-                    28,                                                  // duration days
-                    vec![("internet", true)],                            // tags
-                    (date(12, 5, 2021), true),                           // is active
-                    parse_amount("1.42").unwrap(),                       // per diem
+                    Ok(()),                                           // ok/error
+                    "Mobile internet",                                // title
+                    date(21, 4, 2021),                                // starts_on
+                    (date(18, 5, 2021)),                              // ends_on
+                    28,                                               // duration days
+                    vec![("internet", true)],                         // tags
+                    (date(12, 5, 2021), true),                        // is active
+                    parse_amount("1.42").unwrap(),                    // per diem
                     (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
                 ),
             ),
@@ -714,46 +705,52 @@ mod tests {
             ),
             (
                 // from string with week repeats (39,96)
-                TxRecord::from_string_record("2021-01-03T19:36:43.976697738+00:00::2021-04-21::Mobile internet 9.99€ 210421 1w4x #internet"),
+                TxRecord::from_string_record(
+                    "2021-01-03T19:36:43.976697738+00:00::2021-04-21::Mobile internet 9.99€ 210421 1w4x #internet",
+                ),
                 (
-                    Ok(()),                                              // ok/error
-                    "Mobile internet",                                   // title
-                    date(21, 4, 2021),                                   // starts_on
-                    (date(18, 5, 2021)),                                 // ends_on
-                    28,                                                  // duration days
-                    vec![("internet", true)],                            // tags
-                    (date(12, 5, 2021), true),                           // is active
-                    parse_amount("1.42").unwrap(),                       // per diem
+                    Ok(()),                                           // ok/error
+                    "Mobile internet",                                // title
+                    date(21, 4, 2021),                                // starts_on
+                    (date(18, 5, 2021)),                              // ends_on
+                    28,                                               // duration days
+                    vec![("internet", true)],                         // tags
+                    (date(12, 5, 2021), true),                        // is active
+                    parse_amount("1.42").unwrap(),                    // per diem
                     (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
                 ),
             ),
             (
                 // from string with week repeats (39,96) // WITH WRONG DATE
-                TxRecord::from_string_record("2021-01-03T19:36:43.976697738+00:00::2021-14-21::Mobile internet 9.99€ 210421 1w4x #internet"),
+                TxRecord::from_string_record(
+                    "2021-01-03T19:36:43.976697738+00:00::2021-14-21::Mobile internet 9.99€ 210421 1w4x #internet",
+                ),
                 (
-                    Err(()),                                              // ok/error
-                    "Mobile internet",                                   // title
-                    date(21, 4, 2021),                                   // starts_on
-                    (date(18, 5, 2021)),                                 // ends_on
-                    28,                                                  // duration days
-                    vec![("internet", true)],                            // tags
-                    (date(12, 5, 2021), true),                           // is active
-                    parse_amount("1.42").unwrap(),                       // per diem
+                    Err(()),                                          // ok/error
+                    "Mobile internet",                                // title
+                    date(21, 4, 2021),                                // starts_on
+                    (date(18, 5, 2021)),                              // ends_on
+                    28,                                               // duration days
+                    vec![("internet", true)],                         // tags
+                    (date(12, 5, 2021), true),                        // is active
+                    parse_amount("1.42").unwrap(),                    // per diem
                     (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
                 ),
             ),
             (
                 // from string with week repeats (39,96) // WITH WRONG RECORDED DATE
-                TxRecord::from_string_record("2021-01-32T19:36:43.976697738+00:00::2021-14-21::Mobile internet 9.99€ 210421 1w4x #internet"),
+                TxRecord::from_string_record(
+                    "2021-01-32T19:36:43.976697738+00:00::2021-14-21::Mobile internet 9.99€ 210421 1w4x #internet",
+                ),
                 (
-                    Err(()),                                              // ok/error
-                    "Mobile internet",                                   // title
-                    date(21, 4, 2021),                                   // starts_on
-                    (date(18, 5, 2021)),                                 // ends_on
-                    28,                                                  // duration days
-                    vec![("internet", true)],                            // tags
-                    (date(12, 5, 2021), true),                           // is active
-                    parse_amount("1.42").unwrap(),                       // per diem
+                    Err(()),                                          // ok/error
+                    "Mobile internet",                                // title
+                    date(21, 4, 2021),                                // starts_on
+                    (date(18, 5, 2021)),                              // ends_on
+                    28,                                               // duration days
+                    vec![("internet", true)],                         // tags
+                    (date(12, 5, 2021), true),                        // is active
+                    parse_amount("1.42").unwrap(),                    // per diem
                     (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
                 ),
             ),

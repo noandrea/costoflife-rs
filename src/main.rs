@@ -1,12 +1,10 @@
 mod ledger;
 use ledger::DataStore;
 
-mod interaction;
-
 use std::fmt;
 
 use clap::{Arg, Command};
-use dialoguer::{theme::ColorfulTheme, Confirm};
+use dialoguer::{Confirm, theme::ColorfulTheme};
 use directories_next::ProjectDirs;
 use pad::{Alignment, PadStr};
 
@@ -167,6 +165,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
             if c.is_present("full_list") {
                 println!("full summary not yet supported");
             }
+            println!("Number of records: {}", ds.size(None));
             // title
             p.head(vec!["Item", "Price", "Diem", "Progress"]);
             p.sep();

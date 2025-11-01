@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, LineWriter, Write};
 use std::path::Path;
-use std::str::FromStr;
 
 /// A simple datastore that can persist data on file
 ///
@@ -50,7 +49,7 @@ impl DataStore {
     pub fn save(&self, log_file: &Path) -> Result<(), std::io::Error> {
         let mut file = LineWriter::new(File::create(log_file)?);
         self.data.iter().for_each(|v| {
-            file.write(v.1.to_string_record().as_bytes()).ok();
+            file.write_all(v.1.to_string_record().as_bytes()).ok();
         });
         file.flush()?;
         Ok(())
@@ -187,6 +186,8 @@ impl DataStore {
 }
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use ::costoflife::{self, TxRecord};
     #[test]
@@ -211,11 +212,11 @@ mod tests {
         assert_eq!(tags.len(), 3);
         // tag2
         let got = &tags[0];
-        let exp = (String::from("tag2"), 2 as usize, 60.0);
+        let exp = (String::from("tag2"), 2, 60.0);
         assert_eq!(*got, exp);
         // tag3
         let got = &tags[1];
-        let exp = (String::from("tag3"), 1 as usize, 50.0);
+        let exp = (String::from("tag3"), 1, 50.0);
         assert_eq!(*got, exp);
         // test search
         assert_eq!(ds.search("tag").len(), 4);
@@ -226,7 +227,7 @@ mod tests {
         let p = Path::new("./testdata/costoflife.data.txt");
         // load
         let r = ds.load(p);
-        assert_eq!(r.is_err(), false);
-        assert_eq!(ds.size(None), 5 as usize);
+        assert!(r.is_ok());
+        assert_eq!(ds.size(None), 5);
     }
 }

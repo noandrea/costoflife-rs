@@ -2,7 +2,7 @@
 name = "costoflife"
 version = "0.3.3"
 authors = ["Andrea Giacobino <no.andrea@gmail.com>"]
-edition = "2018"
+edition = "2024"
 license = "MIT"
 description = "The CostOf.Life Calculator"
 repository = "https://github.com/noandrea/costoflife-rs"
