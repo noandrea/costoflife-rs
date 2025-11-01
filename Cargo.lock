@@ -164,7 +164,7 @@ checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
 name = "costoflife"
-version = "0.3.3"
+version = "0.3.4-dev"
 dependencies = [
  "bigdecimal",
  "blake3",

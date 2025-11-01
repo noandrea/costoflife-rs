@@ -260,8 +260,8 @@ fn main() -> Result<(), Box<dyn error::Error>> {
 
 #[derive(Debug)]
 enum Cell {
-    Amt(f32),    // amount
-    Pcent(f32),  // percent
+    Amt(f64),    // amount
+    Pcent(f64),  // percent
     Str(String), // string
     Cnt(usize),  // counter
     Empty,
@@ -291,13 +291,13 @@ impl fmt::Display for Printer {
                             let s = self.sizes[i];
                             match c {
                                 Str(v) => v.pad(s, ' ', Left, true),
-                                Amt(v) => format!("{}€", v).pad(s, ' ', Right, false),
-                                Cnt(v) => format!("{}", v).pad(s, ' ', Right, false),
+                                Amt(v) => format!("{v}€").pad(s, ' ', Right, false),
+                                Cnt(v) => format!("{v}").pad(s, ' ', Right, false),
                                 Empty => "".pad(s, ' ', Right, false),
                                 Pcent(v) => {
                                     let p = v * 100.0;
                                     let b = (p as usize * s) / 100; // bar length
-                                    format!("{:.2}", p).pad(b, self.progress, Right, false)
+                                    format!("{p:.2}").pad(b, self.progress, Right, false)
                                 }
                                 Sep => "".pad(s, self.row_sep, Alignment::Right, false),
                             }
@@ -335,7 +335,7 @@ impl Printer {
     }
 
     pub fn render(&self) {
-        println!("{}", self);
+        println!("{self}");
     }
 }
 
@@ -359,6 +359,7 @@ mod tests {
             Amt(59.0),
             Cnt(321),
             Pcent(0.0420123123), // completion percentage
+                                 //
         ]);
         p.row(vec![
             Str("Three".to_string()),

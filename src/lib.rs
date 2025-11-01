@@ -28,9 +28,9 @@ const SCALE: i64 = 2;
 ///
 ///
 #[wasm_bindgen]
-pub fn costoflife_per_diem(s: &str) -> f32 {
+pub fn costoflife_per_diem(s: &str) -> f64 {
     match TxRecord::from_str(s) {
-        Ok(v) => v.per_diem().to_f32().unwrap(),
+        Ok(v) => v.per_diem().to_f64().unwrap(),
         Err(_) => -1.0,
     }
 }
@@ -264,7 +264,7 @@ impl TxRecord {
     }
     /// Tells if the TxRecord as a tag
     pub fn has_tag(&self, tag: &str) -> bool {
-        self.tags.contains_key(&slugify(&tag))
+        self.tags.contains_key(&slugify(tag))
     }
     /// Returns total amount for the transaction record
     pub fn get_amount_total(&self) -> BigDecimal {
@@ -295,7 +295,7 @@ impl TxRecord {
     /// Get the progress of the transaction at date
     ///
     /// None will use today as a data
-    pub fn get_progress(&self, d: Option<NaiveDate>) -> f32 {
+    pub fn get_progress(&self, d: Option<NaiveDate>) -> f64 {
         let d = match d {
             Some(d) => d,
             None => utils::today(),
@@ -311,9 +311,9 @@ impl TxRecord {
             return 1.0;
         }
         // total number of days
-        let n = (end - start).num_days() as f32;
+        let n = (end - start).num_days() as f64;
         // number of elapsed days
-        let y = (d - start).num_days() as f32;
+        let y = (d - start).num_days() as f64;
         // duration percentage
         y / n
     }
@@ -347,7 +347,7 @@ impl TxRecord {
                 self.get_lifetime(),
                 self.get_tags()
                     .iter()
-                    .map(|t| format!("#{}", t))
+                    .map(|t| format!("#{t}"))
                     .collect::<Vec<String>>()
                     .join(" ")
             ),
@@ -430,7 +430,7 @@ impl TxRecord {
         // validate the amount
         if tx.get_amount() <= BigDecimal::zero() {
             return Err(CostOfLifeError::InvalidAmount(
-                format! {"amount should be a positive number: {}", amount},
+                format! {"amount should be a positive number: {amount}"},
             ));
         }
         // all good
@@ -551,7 +551,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0_f32), // progress                                                 // PARSE ERROR
+                    (Some(today()), 0.0_f64), // progress                                                 // PARSE ERROR
                 ),
             ),
             (
@@ -566,7 +566,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0_f32), // progress                                                 // PARSE ERROR
+                    (Some(today()), 0.0_f64), // progress                                                 // PARSE ERROR
                 ),
             ),
             (
@@ -581,7 +581,7 @@ mod tests {
                     vec![("nice", true), ("living", true), ("car", false)], // tags
                     (today(), true),                                        // is active
                     parse_amount("10").unwrap(),                            // per diem
-                    (Some(today()), 0.0_f32),                               // progress
+                    (Some(today()), 0.0_f64),                               // progress
                 ),
             ),
             (
@@ -596,7 +596,7 @@ mod tests {
                     vec![("home", false), ("rent", true)], // tags
                     (today(), false),                      // is active
                     parse_amount("56.84").unwrap(),        // per diem
-                    (None, 1.0_f32),                       // progress
+                    (None, 1.0_f64),                       // progress
                 ),
             ),
             (
@@ -611,7 +611,7 @@ mod tests {
                     vec![("home", false), ("rent", true), ("#2018", false)], // tags
                     (today(), false),                                        // is active
                     parse_amount("58.84").unwrap(),                          // per diem
-                    (None, 1.0_f32),                                         // progress
+                    (None, 1.0_f64),                                         // progress
                 ),
             ),
             (
@@ -626,7 +626,7 @@ mod tests {
                     vec![("internet", true)],                         // tags
                     (date(12, 5, 2021), true),                        // is active
                     parse_amount("1.42").unwrap(),                    // per diem
-                    (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
+                    (Some(date(5, 5, 2021)), 0.5185185185185185_f64), // progress
                 ),
             ),
             (
@@ -646,7 +646,7 @@ mod tests {
                 (
                     Ok(()),
                     "Car",
-                    date(01, 01, 2010),
+                    date(1, 1, 2010),
                     (date(31, 12, 2029)),
                     7305,
                     vec![
@@ -658,7 +658,7 @@ mod tests {
                     ],
                     (date(1, 1, 2030), false),
                     parse_amount("13.68").unwrap(),
-                    (Some(date(1, 10, 2020)), 0.537513691128149_f32),
+                    (Some(date(1, 10, 2020)), 0.537513691128149_f64),
                 ),
             ),
             (
@@ -679,7 +679,7 @@ mod tests {
                     ],
                     (today(), true),
                     parse_amount("1000000").unwrap(),
-                    (None, 0.0_f32),
+                    (None, 0.0_f64),
                 ),
             ),
             (
@@ -700,7 +700,7 @@ mod tests {
                     ],
                     (today(), true),
                     parse_amount("1000000").unwrap(),
-                    (None, 0.0_f32),
+                    (None, 0.0_f64),
                 ),
             ),
             (
@@ -717,7 +717,7 @@ mod tests {
                     vec![("internet", true)],                         // tags
                     (date(12, 5, 2021), true),                        // is active
                     parse_amount("1.42").unwrap(),                    // per diem
-                    (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
+                    (Some(date(5, 5, 2021)), 0.5185185185185185_f64), // progress
                 ),
             ),
             (
@@ -734,7 +734,7 @@ mod tests {
                     vec![("internet", true)],                         // tags
                     (date(12, 5, 2021), true),                        // is active
                     parse_amount("1.42").unwrap(),                    // per diem
-                    (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
+                    (Some(date(5, 5, 2021)), 0.5185185185185185_f64), // progress
                 ),
             ),
             (
@@ -751,7 +751,7 @@ mod tests {
                     vec![("internet", true)],                         // tags
                     (date(12, 5, 2021), true),                        // is active
                     parse_amount("1.42").unwrap(),                    // per diem
-                    (Some(date(5, 5, 2021)), 0.5185185185185185_f32), // progress
+                    (Some(date(5, 5, 2021)), 0.5185185185185185_f64), // progress
                 ),
             ),
         ];
@@ -759,7 +759,7 @@ mod tests {
         // run the test cases
 
         for (i, t) in tests.iter().enumerate() {
-            println!("test_getters#{}", i);
+            println!("test_getters#{i}");
             let (res, expected) = t;
             let (result, name, starts_on, ends_on, duration, tags, status, per_diem, progress_test) =
                 expected;
@@ -905,7 +905,7 @@ mod tests {
         ];
 
         for (i, t) in tests.iter().enumerate() {
-            println!("test_parse_lifetime#{}", i);
+            println!("test_parse_lifetime#{i}");
 
             let (lifetime_spec, lifetime_exp) = t;
             let (input_str, start_date, duration_days, to_str) = lifetime_spec;

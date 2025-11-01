@@ -56,14 +56,14 @@ impl DataStore {
     }
     /// Retrieve the cost of life for a date
     ///
-    pub fn cost_of_life(&self, d: &NaiveDate) -> f32 {
+    pub fn cost_of_life(&self, d: &NaiveDate) -> f64 {
         costoflife::cost_of_life(self.data.values(), d)
-            .to_f32()
+            .to_f64()
             .unwrap()
     }
     /// Perform a search for a string in tags and transaction name
     ///
-    pub fn search(&self, pattern: &str) -> Vec<(String, f32, f32, String, String, f32, String)> {
+    pub fn search(&self, pattern: &str) -> Vec<(String, f64, f64, String, String, f64, String)> {
         self.index
             .search(pattern)
             .iter()
@@ -71,8 +71,8 @@ impl DataStore {
                 let tx = self.data.get(h).unwrap();
                 (
                     tx.get_name().to_string(),
-                    tx.get_amount_total().to_f32().unwrap(),
-                    tx.per_diem().to_f32().unwrap(),
+                    tx.get_amount_total().to_f64().unwrap(),
+                    tx.per_diem().to_f64().unwrap(),
                     tx.get_starts_on().to_string(),
                     tx.get_ends_on().to_string(),
                     tx.get_progress(None),
@@ -83,7 +83,7 @@ impl DataStore {
     }
     /// Compile a summary of the active costs, returning a tuple with
     /// (title, total amount, cost per day, percentage payed)
-    pub fn summary(&self, d: &NaiveDate) -> Vec<(String, f32, f32, f32)> {
+    pub fn summary(&self, d: &NaiveDate) -> Vec<(String, f64, f64, f64)> {
         let mut s = self
             .data
             .iter()
@@ -91,19 +91,19 @@ impl DataStore {
             .map(|(_k, v)| {
                 (
                     String::from(v.get_name()),
-                    v.get_amount_total().to_f32().unwrap(),
-                    v.per_diem().to_f32().unwrap(),
+                    v.get_amount_total().to_f64().unwrap(),
+                    v.per_diem().to_f64().unwrap(),
                     v.get_progress(Some(*d)),
                 )
             })
-            .collect::<Vec<(String, f32, f32, f32)>>();
+            .collect::<Vec<(String, f64, f64, f64)>>();
         // sort the results descending by completion
         s.sort_by(|a, b| (b.3).partial_cmp(&a.3).unwrap());
         s
     }
     /// Return aggregation summary for tags
     ///
-    pub fn tags(&self, d: &NaiveDate) -> Vec<(String, usize, f32)> {
+    pub fn tags(&self, d: &NaiveDate) -> Vec<(String, usize, f64)> {
         // counters here
         let mut agg: HashMap<String, (usize, BigDecimal)> = HashMap::new();
         // aggregate tags
@@ -123,8 +123,8 @@ impl DataStore {
         // return
         let mut s = agg
             .iter()
-            .map(|(tag, v)| (tag.to_string(), v.0, v.1.clone().to_f32().unwrap()))
-            .collect::<Vec<(String, usize, f32)>>();
+            .map(|(tag, v)| (tag.to_string(), v.0, v.1.clone().to_f64().unwrap()))
+            .collect::<Vec<(String, usize, f64)>>();
         // sort the results descending by count
         s.sort_by(|a, b| (b.2).partial_cmp(&a.2).unwrap());
         s
