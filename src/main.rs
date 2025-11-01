@@ -63,7 +63,17 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                         .help("automatically reply yes"),
                 ),
         )
-        .subcommand(Command::new("summary").about("print th expenses summary"))
+        .subcommand(
+            Command::new("summary")
+                .about("print th expenses summary")
+                .arg(
+                    Arg::new("full_list")
+                        .long("all")
+                        .short('a')
+                        .takes_value(false)
+                        .help("show also completed records"),
+                ),
+        )
         .subcommand(Command::new("tags").about("print th expenses tags summary"))
         .subcommand(
             Command::new("search")
@@ -117,7 +127,7 @@ fn main() -> Result<(), Box<dyn error::Error>> {
             if let Some(values) = c.values_of("EXP_STR") {
                 let v = values.collect::<Vec<&str>>().join(" ");
                 let tx = costoflife::TxRecord::from_str(&v).expect("Cannot parse the input string");
-                // check the values for
+                // check the values for the interactive parameter
                 if c.is_present("non_interactive") {
                     ds.insert(&tx);
                     ds.save(path.as_path())?;
@@ -150,8 +160,13 @@ fn main() -> Result<(), Box<dyn error::Error>> {
                 println!("Tell me what to add, eg: Car 2000€ .transport 5y")
             }
         }
-        Some(("summary", _c)) => {
+        Some(("summary", c)) => {
             let mut p = Printer::new(vec![27, 12, 9, 100]);
+
+            // check the values for
+            if c.is_present("full_list") {
+                println!("full summary not yet supported");
+            }
             // title
             p.head(vec!["Item", "Price", "Diem", "Progress"]);
             p.sep();
